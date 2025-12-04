@@ -2,14 +2,15 @@ const socket = io();
 const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
+const historyList = document.getElementById('history-list');
 
 let isGenerating = false;
-let currentStepContainer = null; // The container for the current active step
-let currentStreamText = "";      // Buffer for text coming in
+let currentStepContainer = null; 
+let currentStreamText = "";
 
 // --- UI Helpers ---
 
-function createMessageBubble(role) {
+function createMessageBubble(role, htmlContent = null) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
     
@@ -17,14 +18,17 @@ function createMessageBubble(role) {
     avatar.className = 'avatar';
     avatar.innerHTML = role === 'user' ? '👤' : '🤖';
     
-    const content = document.createElement('div');
-    content.className = 'content';
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'content';
+    if (htmlContent) {
+        contentDiv.innerHTML = htmlContent;
+    }
     
     msgDiv.appendChild(avatar);
-    msgDiv.appendChild(content);
+    msgDiv.appendChild(contentDiv);
     chatContainer.appendChild(msgDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    return content;
+    return contentDiv;
 }
 
 function ensureAgentContainer() {
@@ -35,16 +39,13 @@ function ensureAgentContainer() {
     return lastMsg.querySelector('.content');
 }
 
-// Creates a placeholder for streaming text before we know it's a "Step"
+// Creates a placeholder for streaming text
 function getOrCreateStepContainer() {
     if (!currentStepContainer) {
         const container = ensureAgentContainer();
-        
-        // Create a temporary thinking box
         const thinkingDiv = document.createElement('div');
         thinkingDiv.className = 'step-thinking';
         thinkingDiv.innerHTML = '<span class="spinner">⚡</span> Thinking...';
-        
         container.appendChild(thinkingDiv);
         currentStepContainer = thinkingDiv;
         currentStreamText = "";
@@ -53,23 +54,26 @@ function getOrCreateStepContainer() {
     return currentStepContainer;
 }
 
-// Transforms the temporary streaming text into a nice collapsible step
-function finalizeStep(stepNumber, code, logs, images, error) {
-    if (!currentStepContainer) return;
-
-    const container = currentStepContainer.parentElement;
+function renderStep(stepNumber, code, logs, images, error) {
+    // 1. Determine where to put the step
+    let container;
     
-    // Remove the temporary streaming text/container
-    currentStepContainer.remove();
-    currentStepContainer = null;
-    currentStreamText = "";
+    if (currentStepContainer) {
+        // LIVE MODE: Replace the "Thinking..." box
+        container = currentStepContainer.parentElement;
+        currentStepContainer.remove();
+        currentStepContainer = null;
+        currentStreamText = "";
+    } else {
+        // HISTORY MODE: Just append to the last agent bubble
+        container = ensureAgentContainer();
+    }
 
-    // Create the permanent collapsible details
+    // 2. Create the collapsible details
     const details = document.createElement('details');
     details.className = 'step';
     if(error) details.classList.add('error');
     
-    // Determine title
     const summary = document.createElement('summary');
     summary.textContent = error ? `Step ${stepNumber} (Failed)` : `Step ${stepNumber}`;
     
@@ -78,27 +82,18 @@ function finalizeStep(stepNumber, code, logs, images, error) {
     
     let htmlContent = "";
     
-    // 1. The Thought/Code (Rendered Markdown)
-    if (code) {
-        htmlContent += `<div class="code-block">${marked.parse(code)}</div>`;
-    }
+    if (code) htmlContent += `<div class="code-block">${marked.parse(code)}</div>`;
+    if (logs) htmlContent += `<div class="logs"><strong>Observation:</strong>\n${logs}</div>`;
     
-    // 2. The Logs/Observations
-    if (logs) {
-        htmlContent += `<div class="logs"><strong>Observation:</strong>\n${logs}</div>`;
-    }
-    
-    // 3. Images
     if (images && images.length > 0) {
         images.forEach(img => {
-            htmlContent += `<br><img src="${img}" class="agent-image"><br>`;
+            // Check if it's a full data URL or just base64
+            const src = img.startsWith('data:') ? img : `data:image/png;base64,${img}`;
+            htmlContent += `<br><img src="${src}" class="agent-image"><br>`;
         });
     }
 
-    // 4. Errors
-    if (error) {
-        htmlContent += `<div class="error-msg"><strong>Error:</strong> ${error}</div>`;
-    }
+    if (error) htmlContent += `<div class="error-msg"><strong>Error:</strong> ${error}</div>`;
 
     body.innerHTML = htmlContent;
     details.appendChild(summary);
@@ -108,7 +103,80 @@ function finalizeStep(stepNumber, code, logs, images, error) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// --- Event Listeners ---
+// --- Socket Events: Chat Lifecycle ---
+
+socket.on('connect', () => {
+    console.log("Connected to server");
+    // Request history list immediately on connect
+    socket.emit('get_history');
+});
+
+socket.on('history_list', (data) => {
+    historyList.innerHTML = ''; // Clear current list
+    
+    // Add "New Chat" button at the top
+    const newChatBtn = document.createElement('div');
+    newChatBtn.className = 'history-item new-chat';
+    newChatBtn.innerHTML = '+ New Chat';
+    newChatBtn.onclick = () => {
+        socket.emit('new_chat');
+    };
+    historyList.appendChild(newChatBtn);
+
+    // Populate sessions
+    data.sessions.forEach(session => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML = `
+            <div style="font-weight:bold">${session.preview}</div>
+            <div style="font-size:0.8em; opacity:0.7">${session.timestamp}</div>
+        `;
+        item.onclick = () => loadSession(session.id);
+        historyList.appendChild(item);
+    });
+});
+
+function loadSession(id) {
+    socket.emit('load_session', { id: id });
+}
+
+socket.on('reload_chat', (data) => {
+    // Clear the chat window
+    chatContainer.innerHTML = '';
+    
+    // Iterate through steps and render
+    data.steps.forEach(step => {
+        if (step.type === 'TaskStep') {
+            createMessageBubble('user').textContent = step.task;
+        } 
+        else if (step.type === 'ActionStep') {
+            renderStep(
+                step.step_number, 
+                step.code, 
+                step.observations, 
+                step.images, 
+                step.error
+            );
+        }
+        else if (step.type === 'FinalAnswerStep') {
+            const container = ensureAgentContainer();
+            const div = document.createElement('div');
+            div.className = 'final-answer';
+            
+            if (step.is_image) {
+                const src = step.content.startsWith('data:') ? step.content : `data:image/png;base64,${step.content}`;
+                div.innerHTML = `<strong>Final Answer:</strong><br><img src="${src}" class="agent-image">`;
+            } else {
+                div.innerHTML = marked.parse(step.content);
+            }
+            container.appendChild(div);
+        }
+    });
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+});
+
+
+// --- Socket Events: Streaming ---
 
 sendBtn.addEventListener('click', () => {
     if (isGenerating) return;
@@ -122,39 +190,22 @@ sendBtn.addEventListener('click', () => {
     socket.emit('start_run', { message: text });
 });
 
-// --- Socket Events ---
-
-socket.on('agent_start', () => {
-    // Prepare UI for new response
-});
-
 socket.on('stream_delta', (data) => {
     const div = getOrCreateStepContainer();
-    
-    // We append raw text to the buffer
     currentStreamText += data.content;
-    
-    // Update UI - using pre-wrap style to preserve formatting without full markdown parsing on every char
-    // This is much faster and prevents flickering
     div.textContent = currentStreamText; 
-    
-    // Auto-scroll
     chatContainer.scrollTop = chatContainer.scrollHeight;
 });
 
 socket.on('tool_start', (data) => {
-    // Optional: Update the "Thinking..." text to show what tool is being called
     const div = getOrCreateStepContainer();
-    // Only update if we haven't generated a lot of text yet
     if (currentStreamText.length < 50) {
         div.innerHTML = `<span class="spinner">⚙️</span> Calling ${data.tool_name}...`;
     }
 });
 
 socket.on('action_step', (data) => {
-    // Use the buffered text (currentStreamText) as the 'Code/Thought' content if code is missing, 
-    // but usually 'data.code' contains the full python snippet from the agent.
-    finalizeStep(
+    renderStep(
         data.step_number, 
         data.code, 
         data.observations, 
@@ -164,9 +215,7 @@ socket.on('action_step', (data) => {
 });
 
 socket.on('final_answer', (data) => {
-    // Ensure any dangling stream is cleared
     if (currentStepContainer) currentStepContainer.remove();
-
     const container = ensureAgentContainer();
     const div = document.createElement('div');
     div.className = 'final-answer';
@@ -176,18 +225,13 @@ socket.on('final_answer', (data) => {
     } else {
         div.innerHTML = marked.parse(data.content);
     }
-    
     container.appendChild(div);
     chatContainer.scrollTop = chatContainer.scrollHeight;
     isGenerating = false;
+    
+    // Refresh history list to show the new save
+    socket.emit('get_history');
 });
 
-socket.on('run_complete', () => {
-    isGenerating = false;
-});
-
-socket.on('error', (data) => {
-    const container = ensureAgentContainer();
-    container.innerHTML += `<div class="error-msg">System Error: ${data.message}</div>`;
-    isGenerating = false;
-});
+socket.on('run_complete', () => { isGenerating = false; });
+socket.on('error', (data) => { alert(data.message); isGenerating = false; });
