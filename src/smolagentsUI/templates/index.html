@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smolagents Studio</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2>History</h2>
+                <button class="new-chat-btn">+ New Chat</button>
+            </div>
+            <div class="history-list">
+                <div class="history-item active">Current Session</div>
+                <div class="history-item">Previous Analysis...</div>
+                <div class="history-item">Debug: Weather Tool</div>
+            </div>
+            <div class="sidebar-footer">
+                <div class="user-profile">User</div>
+            </div>
+        </div>
+
+        <div class="main-area">
+            <div class="chat-container" id="chat-container">
+                <div class="message system">
+                    <div class="avatar">🤖</div>
+                    <div class="content">Agent ready. Type a task to begin.</div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <textarea id="user-input" placeholder="Instructions for the agent..." rows="1"></textarea>
+                    <button id="send-btn">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
