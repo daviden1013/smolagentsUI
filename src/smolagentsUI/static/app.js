@@ -146,30 +146,34 @@ socket.on('reload_chat', (data) => {
     
     // Iterate through steps and render
     data.steps.forEach(step => {
-        if (step.type === 'TaskStep') {
+        if ("task" in step) {
             createMessageBubble('user').textContent = step.task;
         } 
-        else if (step.type === 'ActionStep') {
+        else if ("step_number" in step) {
             renderStep(
                 step.step_number, 
-                step.code, 
+                step.code_action, 
                 step.observations, 
                 step.images, 
                 step.error
             );
-        }
-        else if (step.type === 'FinalAnswerStep') {
-            const container = ensureAgentContainer();
-            const div = document.createElement('div');
-            div.className = 'final-answer';
             
-            if (step.is_image) {
-                const src = step.content.startsWith('data:') ? step.content : `data:image/png;base64,${step.content}`;
-                div.innerHTML = `<strong>Final Answer:</strong><br><img src="${src}" class="agent-image">`;
-            } else {
-                div.innerHTML = marked.parse(step.content);
+        
+            if (step.is_final_answer) {
+                const container = ensureAgentContainer();
+                const div = document.createElement('div');
+                div.className = 'final-answer';
+                
+                const finalContent = step.action_output || ""; 
+
+                if (step.is_image) {
+                    const src = finalContent.startsWith('data:') ? finalContent : `data:image/png;base64,${finalContent}`;
+                    div.innerHTML = `<strong>Final Answer:</strong><br><img src="${src}" class="agent-image">`;
+                } else {
+                    div.innerHTML = marked.parse(String(finalContent));
+                }
+                container.appendChild(div);
             }
-            container.appendChild(div);
         }
     });
     chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -207,7 +211,7 @@ socket.on('tool_start', (data) => {
 socket.on('action_step', (data) => {
     renderStep(
         data.step_number, 
-        data.code, 
+        data.code_action, 
         data.observations, 
         data.images, 
         data.error
