@@ -13,7 +13,8 @@ from smolagents.memory import (
 )
 from smolagents import CodeAgent
 from smolagents.monitoring import Timing
-from smolagents.models import ChatMessageStreamDelta
+from smolagents.models import ChatMessageStreamDelta, ChatMessage, TokenUsage
+
 
 class AgentWrapper:
     def __init__(self, agent:CodeAgent):
@@ -29,69 +30,104 @@ class AgentWrapper:
             raise ValueError("AgentWrapper currently only supports CodeAgent instances.")   
         self.agent = agent
 
-    def get_steps_data(self, include_final_step: Optional[FinalAnswerStep] = None) -> List[Dict]:
+    def get_steps_data(self) -> List[Dict]:
         """
         Serializes the current agent memory into a list of dictionaries.
         """
-        steps_to_save = list(self.agent.memory.steps)
-        
-        # Check if the last step is already this final step to avoid dupes
-        if include_final_step:
-            if not steps_to_save or steps_to_save[-1] is not include_final_step:
-                steps_to_save.append(include_final_step)
+        return self.agent.memory.get_full_steps()
 
-        return [self._serialize_step(step) for step in steps_to_save]
+    def load_memory(self, steps_data: List[Dict]):
+        """
+        Reconstructs agent memory steps from a list of dictionaries 
+        (output of agent.memory.get_full_steps()).
+        """
+        reconstructed_steps = []
 
-    def reload_memory(self, steps_data: List[Dict]):
-        """Rehydrates the agent's memory from stored JSON data."""
-        new_steps = []
-        for s in steps_data:
-            step_type = s.get("type")
-            
-            if step_type == "TaskStep":
-                new_steps.append(TaskStep(task=s["task"]))
+        for step_data in steps_data:
+            # 1. Identify and reconstruct ActionStep
+            if "step_number" in step_data:
+                # Reconstruct nested objects
+                timing = Timing(start_time=step_data["timing"]["start_time"], end_time=step_data["timing"]["end_time"]) if step_data.get("timing") else None
+                token_usage = TokenUsage(input_tokens=step_data["token_usage"]["input_tokens"],
+                                         output_tokens=step_data["token_usage"]["output_tokens"]) if step_data.get("token_usage") else None
                 
-            elif step_type == "ActionStep":
-                timing_data = s.get("timing")
-                timing_obj = Timing(start_time=0.0, end_time=0.0)
-                if isinstance(timing_data, dict):
-                    timing_obj = Timing(
-                        start_time=timing_data.get("start_time", 0.0),
-                        end_time=timing_data.get("end_time")
-                    )
+                # Reconstruct ToolCalls (parsing required because dict() structure differs from init)
+                tool_calls = []
+                if step_data.get("tool_calls"):
+                    for tc in step_data["tool_calls"]:
+                        tool_calls.append(ToolCall(
+                            id=tc["id"],
+                            name=tc["function"]["name"],
+                            arguments=tc["function"]["arguments"]
+                        ))
+
+                # Reconstruct ChatMessages
+                model_input_messages = [
+                    ChatMessage.from_dict(msg) for msg in step_data.get("model_input_messages", [])
+                ] if step_data.get("model_input_messages") else None
+                
+                model_output_message = ChatMessage.from_dict(step_data["model_output_message"]) if step_data.get("model_output_message") else None
 
                 step = ActionStep(
-                    step_number=s.get("step_number", 1),
-                    code_action=s.get("code"),
-                    observations=s.get("observations"),
-                    error=s.get("error"),
-                    timing=timing_obj
+                    step_number=step_data["step_number"],
+                    timing=timing,
+                    model_input_messages=model_input_messages,
+                    tool_calls=tool_calls,
+                    model_output_message=model_output_message,
+                    model_output=step_data.get("model_output"),
+                    observations=step_data.get("observations"),
+                    action_output=step_data.get("action_output"),
+                    token_usage=token_usage,
+                    code_action=step_data.get("code_action"),
+                    is_final_answer=step_data.get("is_final_answer", False)
                 )
-                new_steps.append(step)
+                reconstructed_steps.append(step)
+
+            # 2. Identify and reconstruct PlanningStep
+            elif "plan" in step_data:
+                timing = Timing(**step_data["timing"]) if step_data.get("timing") else None
+                token_usage = TokenUsage(**step_data["token_usage"]) if step_data.get("token_usage") else None
                 
-            elif step_type == "FinalAnswerStep":
-                content = s.get("content")
-                new_steps.append(FinalAnswerStep(output=content))
-        
-        self.agent.memory.steps = new_steps
+                model_input_messages = [
+                    ChatMessage.from_dict(msg) for msg in step_data.get("model_input_messages", [])
+                ]
+                model_output_message = ChatMessage.from_dict(step_data["model_output_message"])
+
+                step = PlanningStep(
+                    model_input_messages=model_input_messages,
+                    model_output_message=model_output_message,
+                    plan=step_data["plan"],
+                    timing=timing,
+                    token_usage=token_usage
+                )
+                reconstructed_steps.append(step)
+
+            # 3. Identify and reconstruct TaskStep
+            elif "task" in step_data:
+                step = TaskStep(
+                    task=step_data["task"],
+                    task_images=step_data.get("task_images") 
+                )
+                reconstructed_steps.append(step)
+
+        return reconstructed_steps
 
     def clear_memory(self):
         self.agent.memory.reset()
 
-    def run(self, task: str) -> Generator[Dict, None, Optional[FinalAnswerStep]]:
+    def run(self, task: str) -> Generator[Dict, None, Optional[ActionStep]]:
         """
         Runs the agent and yields UI-friendly event dictionaries.
-        Returns the FinalAnswerStep (if success) for saving.
         """
         stream = self.agent.run(task, stream=True, reset=False)
         final_step_obj = None
 
         for step in stream:
             # 1. Final Answer
-            if isinstance(step, FinalAnswerStep):
+            if isinstance(step, ActionStep) and step.is_final_answer:
                 final_step_obj = step
                 yield {'type': 'final_answer', 
-                       'content': str(step.output)
+                       'content': str(step.action_output)
                       }
             
             # 2. Streaming Text
@@ -99,16 +135,13 @@ class AgentWrapper:
                 if step.content:
                     yield {'type': 'stream_delta', 'content': step.content}
             
-            # 3. Tool Calls
-            elif isinstance(step, ToolCall):
-                yield {'type': 'tool_start', 'tool_name': step.name, 'arguments': str(step.arguments)}
-            
             # 4. Action Steps (Code & Logs)
             elif isinstance(step, ActionStep):
                 yield {
                         'type': 'action_step',
                         'step_number': step.step_number,
-                        'code': step.code_action,
+                        'model_output': step.model_output,
+                        'code_action': step.code_action,
                         'observations': step.observations or "",
                         'error': str(step.error) if step.error else None
                       }
@@ -118,28 +151,4 @@ class AgentWrapper:
                 yield {'type': 'planning_step', 'plan': step.plan}
 
         return final_step_obj
-
-    # --- Serialization Helpers ---
-    def _serialize_step(self, step) -> Dict[str, Any]:
-        data = {"type": type(step).__name__}
-        
-        if isinstance(step, TaskStep):
-            data["task"] = step.task
-            
-        elif isinstance(step, ActionStep):
-            data["step_number"] = step.step_number
-            data["code"] = step.code_action
-            data["observations"] = step.observations
-            data["error"] = str(step.error) if step.error else None
-            
-            timing_obj = getattr(step, "duration", getattr(step, "timing", None))
-            if hasattr(timing_obj, "dict"):
-                data["timing"] = timing_obj.dict()
-            else:
-                data["timing"] = None
-
-        elif isinstance(step, FinalAnswerStep):
-            data["content"] = str(step.output)
-
-        return data
 

@@ -1,5 +1,6 @@
 import os
 import json
+import traceback
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 
@@ -60,7 +61,7 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
             
         print(f"📂 Loading session: {target_id}")
         current_session_id = target_id
-        current_agent_wrapper.reload_memory(session.get("steps", []))
+        current_agent_wrapper.load_memory(session.get("steps", []))
         emit('reload_chat', session)
 
     @socketio.on('start_run')
@@ -71,35 +72,34 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
             return
 
         print(f"🚀 Starting run: {task}")
-        captured_final_step = None
         
         try:
             emit('agent_start')
             
-            # Use the generator from AgentWrapper
-            for event in current_agent_wrapper.run(task):
-                socketio.sleep(0) # Yield to event loop
-                emit(event['type'], event) # Pass events directly to UI
-                
-                # If this event was the final answer, capture the step object return
-                # Note: The generator logic I wrote above for .run() returns the final_step 
-                # object upon completion, it does not yield it. 
-                # We need to capture the return value of the generator.
-                pass 
+            # Use manual iteration to capture the return value of the generator.
+            # The agent_wrapper.run() generator returns the FinalAnswerStep object
+            # upon completion, which we need for saving.
+            generator = current_agent_wrapper.run(task)
+            
+            while True:
+                try:
+                    event = next(generator)
+                    socketio.sleep(0) # Yield to event loop
+                    emit(event['type'], event) # Pass events directly to UI
+                except StopIteration as e:
+                    break
 
         except Exception as e:
             print(f"Error: {e}")
+            print(f"Caught exception type: {type(e).__name__}")
+            traceback.print_exc()
             emit('error', {'message': str(e)})
         finally:
             emit('run_complete')
             
             # --- Saving Logic ---
-            # Retrieve the full finalized memory (including the potentially new FinalAnswer)
-            # We don't have easy access to the generator's return value in a for-loop 
-            # without strict changes, so we rely on the memory state.
-            
-            # We manually look for the last step in memory to see if it's the final answer
-            # or rely on what's in the agent's memory list.
+            # Retrieve the full finalized memory.
+            # We pass captured_final_step so get_steps_data can append it if it's missing from memory.
             steps_data = current_agent_wrapper.get_steps_data()
             
             # Determine preview text (Task name)
