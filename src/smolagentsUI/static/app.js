@@ -1,3 +1,4 @@
+/* src/smolagentsUI/static/app.js */
 const socket = io();
 const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
@@ -54,7 +55,7 @@ function getOrCreateStepContainer() {
     return currentStepContainer;
 }
 
-function renderStep(stepNumber, code, logs, images, error) {
+function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     // 1. Determine where to put the step
     let container;
     
@@ -82,6 +83,11 @@ function renderStep(stepNumber, code, logs, images, error) {
     
     let htmlContent = "";
     
+    // Add the model output (thought)
+    if (modelOutput) {
+        htmlContent += `<div class="model-output" style="margin-bottom: 10px; border-bottom: 1px dashed #444; padding-bottom: 10px;">${marked.parse(modelOutput)}</div>`;
+    }
+
     if (code) htmlContent += `<div class="code-block">${marked.parse(code)}</div>`;
     if (logs) htmlContent += `<div class="logs"><strong>Observation:</strong>\n${logs}</div>`;
     
@@ -152,6 +158,7 @@ socket.on('reload_chat', (data) => {
         else if ("step_number" in step) {
             renderStep(
                 step.step_number, 
+                step.model_output, // Pass model output
                 step.code_action, 
                 step.observations, 
                 step.images, 
@@ -211,6 +218,7 @@ socket.on('tool_start', (data) => {
 socket.on('action_step', (data) => {
     renderStep(
         data.step_number, 
+        data.model_output, // Pass model output
         data.code_action, 
         data.observations, 
         data.images, 
