@@ -20,11 +20,6 @@ class AgentWrapper:
     def __init__(self, agent:CodeAgent):
         """
         This class wraps a smolagent.CodeAgent to manage memory, serialization and streaming.
-
-        Parameters:
-        -----------
-        agent : CodeAgent
-            An instance of smolagents.CodeAgent to be wrapped.
         """
         if not isinstance(agent, CodeAgent):
             raise ValueError("AgentWrapper currently only supports CodeAgent instances.")   
@@ -39,7 +34,7 @@ class AgentWrapper:
     def load_memory(self, steps_data: List[Dict]):
         """
         Reconstructs agent memory steps from a list of dictionaries 
-        (output of agent.memory.get_full_steps()).
+        and updates the agent's internal memory state.
         """
         reconstructed_steps = []
 
@@ -51,7 +46,7 @@ class AgentWrapper:
                 token_usage = TokenUsage(input_tokens=step_data["token_usage"]["input_tokens"],
                                          output_tokens=step_data["token_usage"]["output_tokens"]) if step_data.get("token_usage") else None
                 
-                # Reconstruct ToolCalls (parsing required because dict() structure differs from init)
+                # Reconstruct ToolCalls
                 tool_calls = []
                 if step_data.get("tool_calls"):
                     for tc in step_data["tool_calls"]:
@@ -110,7 +105,8 @@ class AgentWrapper:
                 )
                 reconstructed_steps.append(step)
 
-        return reconstructed_steps
+        self.agent.memory.reset()
+        self.agent.memory.steps = reconstructed_steps
 
     def clear_memory(self):
         self.agent.memory.reset()
@@ -123,19 +119,12 @@ class AgentWrapper:
         final_step_obj = None
 
         for step in stream:
-            # 1. Final Answer
-            if isinstance(step, ActionStep) and step.is_final_answer:
-                final_step_obj = step
-                yield {'type': 'final_answer', 
-                       'content': str(step.action_output)
-                      }
-            
-            # 2. Streaming Text
-            elif isinstance(step, ChatMessageStreamDelta):
+            # Streaming Text
+            if isinstance(step, ChatMessageStreamDelta):
                 if step.content:
                     yield {'type': 'stream_delta', 'content': step.content}
             
-            # 4. Action Steps (Code & Logs)
+            # Action Steps (Code & Logs)
             elif isinstance(step, ActionStep):
                 yield {
                         'type': 'action_step',
@@ -144,11 +133,16 @@ class AgentWrapper:
                         'code_action': step.code_action,
                         'observations': step.observations or "",
                         'error': str(step.error) if step.error else None
-                      }
-            
-            # 5. Planning
+                        }
+                
+                if step.is_final_answer:
+                    final_step_obj = step
+                    yield {'type': 'final_answer', 
+                        'content': str(step.action_output)
+                        }
+                    
+            # Planning
             elif isinstance(step, PlanningStep):
                 yield {'type': 'planning_step', 'plan': step.plan}
 
         return final_step_obj
-
