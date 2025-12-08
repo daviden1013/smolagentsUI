@@ -201,6 +201,14 @@ sendBtn.addEventListener('click', () => {
     socket.emit('start_run', { message: text });
 });
 
+// Handle Enter key to send, Shift+Enter for newline
+userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); // Prevent the default newline insertion
+        sendBtn.click();    // Trigger the send logic
+    }
+});
+
 socket.on('stream_delta', (data) => {
     const div = getOrCreateStepContainer();
     currentStreamText += data.content;
