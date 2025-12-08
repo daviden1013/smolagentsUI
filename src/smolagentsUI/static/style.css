@@ -234,3 +234,37 @@ img.agent-image {
     font-size: 0.85em;
     color: #888;
 }
+
+* {
+    scrollbar-width: thin; 
+    scrollbar-color: #777777 #2c2c2c;
+}
+
+/* --- Webkit Method (Chrome, Edge, Safari, Opera) --- */
+::-webkit-scrollbar {
+    width: 14px;  /* Width for vertical scrollbars */
+    height: 14px; /* Height for horizontal scrollbars */
+}
+
+::-webkit-scrollbar-track {
+    background: #2c2c2c; /* Deep gray background to blend with dark themes */
+    border-radius: 0px;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: #666666; /* A medium matte gray */
+    border-radius: 10px;       /* Makes the thumb rounded */
+    
+    /* This trick creates padding around the thumb so it doesn't fill the track width */
+    border: 3px solid transparent; 
+    background-clip: content-box; 
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: #888888; /* A slightly lighter gray on hover */
+}
+
+::-webkit-scrollbar-thumb:active {
+    background-color: #999999; 
+    border: 2px solid transparent; /* Slightly larger on click for feedback */
+}
