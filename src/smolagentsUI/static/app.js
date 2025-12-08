@@ -83,9 +83,14 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     
     let htmlContent = "";
     
-    // Add the model output (thought)
+    // Add the model output (thought) - Filter out raw <code> tags!
     if (modelOutput) {
-        htmlContent += `<div class="model-output" style="margin-bottom: 10px; border-bottom: 1px dashed #444; padding-bottom: 10px;">${marked.parse(modelOutput)}</div>`;
+        // Regex matches <code>...</code> (non-greedy) including newlines
+        const thoughtContent = modelOutput.replace(/<code>[\s\S]*?<\/code>/g, "").trim();
+        
+        if (thoughtContent) {
+            htmlContent += `<div class="model-output" style="margin-bottom: 10px; border-bottom: 1px dashed #444; padding-bottom: 10px;">${marked.parse(thoughtContent)}</div>`;
+        }
     }
 
     // Wrap code in python markdown fences for nice rendering
