@@ -221,6 +221,12 @@ img.agent-image {
     margin-bottom: 10px;
 }
 
+/* Highlight.js atom-one-dark background */
+.code-block .hljs {
+    background: transparent;
+    padding: 0;
+}
+
 .error-msg {
     color: #ff6b6b;
     padding: 5px;

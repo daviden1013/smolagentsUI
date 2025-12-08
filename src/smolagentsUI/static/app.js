@@ -88,7 +88,12 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
         htmlContent += `<div class="model-output" style="margin-bottom: 10px; border-bottom: 1px dashed #444; padding-bottom: 10px;">${marked.parse(modelOutput)}</div>`;
     }
 
-    if (code) htmlContent += `<div class="code-block">${marked.parse(code)}</div>`;
+    // Wrap code in python markdown fences for nice rendering
+    if (code) {
+        const fencedCode = "```python\n" + code + "\n```";
+        htmlContent += `<div class="code-block">${marked.parse(fencedCode)}</div>`;
+    }
+    
     if (logs) htmlContent += `<div class="logs"><strong>Observation:</strong>\n${logs}</div>`;
     
     if (images && images.length > 0) {
@@ -106,6 +111,12 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     details.appendChild(body);
     
     container.appendChild(details);
+
+    // 3. Highlight code blocks inside this step
+    details.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightElement(block);
+    });
+    
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
