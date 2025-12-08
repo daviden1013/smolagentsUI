@@ -15,17 +15,12 @@ function createMessageBubble(role, htmlContent = null) {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
     
-    const avatar = document.createElement('div');
-    avatar.className = 'avatar';
-    avatar.innerHTML = role === 'user' ? '👤' : '🤖';
-    
     const contentDiv = document.createElement('div');
     contentDiv.className = 'content';
     if (htmlContent) {
         contentDiv.innerHTML = htmlContent;
     }
     
-    msgDiv.appendChild(avatar);
     msgDiv.appendChild(contentDiv);
     chatContainer.appendChild(msgDiv);
     chatContainer.scrollTop = chatContainer.scrollHeight;
