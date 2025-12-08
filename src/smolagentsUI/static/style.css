@@ -141,7 +141,15 @@ details[open] summary::after { content: '▲'; }
 
 .tool-call { color: #61dafb; margin-bottom: 5px; }
 .logs { color: #aaa; }
-.final-answer { background-color: #2a2b32; padding: 15px; border-radius: 8px; border-left: 4px solid var(--accent); }
+
+.final-answer {
+    background-color: #2a2b32;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid var(--accent);
+    overflow-x: auto;
+    max-width: 100%;
+}
 
 /* Input Area */
 .input-area {
@@ -243,6 +251,25 @@ img.agent-image {
     padding-top: 10px;
     font-size: 0.85em;
     color: #888;
+}
+
+/* Markdown Table Styles */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+th, td {
+    border: 1px solid var(--border);
+    padding: 8px 12px;
+    text-align: left;
+}
+
+th {
+    background-color: #2a2b32;
+    font-weight: 600;
 }
 
 * {
