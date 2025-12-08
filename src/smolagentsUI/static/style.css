@@ -104,6 +104,7 @@ body {
 .message .content {
     flex-grow: 1;
     line-height: 1.6;
+    min-width: 0; 
 }
 
 /* Collapsible Steps */
@@ -113,6 +114,7 @@ details.step {
     border-radius: 8px;
     margin-bottom: 10px;
     overflow: hidden;
+    max-width: 100%; 
 }
 
 summary {
@@ -217,14 +219,16 @@ img.agent-image {
     background: #111;
     padding: 10px;
     border-radius: 4px;
-    overflow-x: auto;
+    overflow-x: auto; 
     margin-bottom: 10px;
+    max-width: 100%; 
 }
 
-/* Highlight.js atom-one-dark background */
 .code-block .hljs {
     background: transparent;
     padding: 0;
+    white-space: pre;   /* Forces text to stay on one line */
+    word-wrap: normal;  /* Prevents breaking of long words */
 }
 
 .error-msg {
