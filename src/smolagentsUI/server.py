@@ -1,24 +1,53 @@
 import os
-import json
 import traceback
+import copy
+import uuid
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
-
-# Import our new modules
 from .conversation_manager import ConversationManager
 from .agent_wrapper import AgentWrapper
-
 from smolagents.memory import TaskStep
 
-current_agent_wrapper = None
+# Global State
+prototype_agent = None  # The user-provided agent (template)
+active_agents = {}    # Maps session_id -> AgentWrapper instance
+stop_signals = {}       # Maps session_id -> bool (True if stop requested)
 conversation_manager = None
-current_session_id = None
+
+def get_agent_wrapper(session_id):
+    """
+    Retrieves an existing agent wrapper for the session, 
+    or creates a new 'child' agent from the prototype.
+    """
+    global active_agents, prototype_agent
+    
+    if session_id in active_agents:
+        print(f"🔄 Reusing existing agent for session: {session_id}")
+        return active_agents[session_id]
+
+    print(f"✨ Spawning new agent for session: {session_id}")
+    
+    # Copy the prototype agent
+    new_agent = copy.copy(prototype_agent)
+    new_agent.memory = copy.deepcopy(prototype_agent.memory)
+    new_agent.memory.reset()
+    
+    # Wrap new agent
+    wrapper = AgentWrapper(new_agent)
+    
+    # Load history if this is an old session being resumed
+    session_data = conversation_manager.get_session(session_id)
+    if session_data:
+        wrapper.load_memory(session_data.get("steps", []))
+        
+    active_agents[session_id] = wrapper
+    return wrapper
 
 def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
-    global current_agent_wrapper, conversation_manager, current_session_id
+    global prototype_agent, conversation_manager
     
-    # Initialize Core Components
-    current_agent_wrapper = AgentWrapper(agent)
+    # 1. Store the prototype
+    prototype_agent = agent
     conversation_manager = ConversationManager(storage_path)
     
     # Initialize Flask
@@ -44,14 +73,11 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
 
     @socketio.on('new_chat')
     def handle_new_chat():
-        global current_session_id
-        current_session_id = None
-        current_agent_wrapper.clear_memory()
+        # Just tell UI to clear; backend will lazy-create the agent when run starts
         emit('reload_chat', {'steps': []})
 
     @socketio.on('load_session')
     def handle_load_session(data):
-        global current_session_id
         target_id = data.get('id')
         session = conversation_manager.get_session(target_id)
         
@@ -59,9 +85,9 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
             emit('error', {'message': "Session not found"})
             return
             
-        print(f"📂 Loading session: {target_id}")
-        current_session_id = target_id
-        current_agent_wrapper.load_memory(session.get("steps", []))
+        print(f"📂 Loading session UI: {target_id}")
+        get_agent_wrapper(target_id) 
+        
         emit('reload_chat', session)
 
     @socketio.on('rename_session')
@@ -69,75 +95,92 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
         session_id = data.get('id')
         new_name = data.get('new_name')
         if conversation_manager.rename_session(session_id, new_name):
-            # Refresh the list for all clients
             emit('history_list', {'sessions': conversation_manager.get_session_summaries()})
 
     @socketio.on('delete_session')
     def handle_delete_session(data):
-        global current_session_id
         session_id = data.get('id')
         
-        if conversation_manager.delete_session(session_id):
-            # If we deleted the active session, clear the screen
-            if current_session_id == session_id:
-                current_session_id = None
-                current_agent_wrapper.clear_memory()
-                emit('reload_chat', {'steps': []})
+        # Cleanup active session if it exists
+        if session_id in active_agents:
+            del active_agents[session_id]
             
+        if conversation_manager.delete_session(session_id):
             emit('history_list', {'sessions': conversation_manager.get_session_summaries()})
+
+    @socketio.on('stop_run')
+    def handle_stop_run(data):
+        session_id = data.get('session_id')
+        if session_id:
+            print(f"🛑 Stop signal received for {session_id}")
+            stop_signals[session_id] = True
 
     @socketio.on('start_run')
     def handle_run(data):
-        global current_session_id
+        session_id = data.get('session_id')
         task = data.get('message')
-        if not task or not current_agent_wrapper:
-            return
+        
+        # Determine Session ID (if new chat, generate one)
+        if not session_id:
+            session_id = str(uuid.uuid4())
+            emit('session_created', {'id': session_id})
 
-        print(f"🚀 Starting run: {task}")
+        # Get the specific agent for this session
+        wrapper = get_agent_wrapper(session_id)
+        
+        # Reset Stop Signal
+        stop_signals[session_id] = False
+
+        print(f"🚀 Starting run for {session_id}: {task}")
         
         try:
-            emit('agent_start')
+            emit('agent_start', {'session_id': session_id})
             
-            # Use manual iteration to capture the return value of the generator.
-            # The agent_wrapper.run() generator returns the FinalAnswerStep object
-            # upon completion, which we need for saving.
-            generator = current_agent_wrapper.run(task)
+            generator = wrapper.run(task)
             
             while True:
+                # Check Stop Signal
+                if stop_signals.get(session_id, False):
+                    emit('stream_delta', {'content': "\n\n[Stopped by user]", 'session_id': session_id})
+                    break
+
                 try:
                     event = next(generator)
-                    socketio.sleep(0) # Yield to event loop
-                    emit(event['type'], event) # Pass events directly to UI
-                except StopIteration as e:
+                    socketio.sleep(0)
+                    
+                    # Inject Session ID into event so UI knows where to route it
+                    event['session_id'] = session_id
+                    emit(event['type'], event)
+                    
+                except StopIteration:
                     break
 
         except Exception as e:
-            print(f"Error: {e}")
-            print(f"Caught exception type: {type(e).__name__}")
+            print(f"Error in session {session_id}: {e}")
             traceback.print_exc()
-            emit('error', {'message': str(e)})
+            emit('error', {'message': str(e), 'session_id': session_id})
         finally:
-            emit('run_complete')
+            emit('run_complete', {'session_id': session_id})
             
             # --- Saving Logic ---
-            # Retrieve the full finalized memory.
-            # We pass captured_final_step so get_steps_data can append it if it's missing from memory.
-            steps_data = current_agent_wrapper.get_steps_data()
+            steps_data = wrapper.get_steps_data()
             
-            # Determine preview text (Task name)
+            # Determine preview
             preview = "New Chat"
             if len(steps_data) > 0 and steps_data[0].get('task'):
                  preview = steps_data[0]['task'][:50] + "..."
+            elif conversation_manager.get_session(session_id):
+                 preview = conversation_manager.get_session(session_id).get('preview', 'New Chat')
 
-            # Save
-            current_session_id = conversation_manager.save_session(
-                current_session_id, 
+            # Thread-safe save
+            final_id = conversation_manager.save_session(
+                session_id, 
                 steps_data, 
                 task_preview=preview
             )
             
-            # Refresh history list in UI
-            handle_get_history()
+            # Refresh history list
+            emit('history_list', {'sessions': conversation_manager.get_session_summaries()})
 
     print(f"✨ SmolagentsUI running on http://{host}:{port}")
     socketio.run(app, host=host, port=port, debug=debug)

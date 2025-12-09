@@ -5,91 +5,32 @@ const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const historyList = document.getElementById('history-list');
 
-// Modal Elements
-const modalOverlay = document.getElementById('modal-overlay');
-const modalTitle = document.getElementById('modal-title');
-const modalMsg = document.getElementById('modal-msg');
-const modalInput = document.getElementById('modal-input');
-const modalConfirmBtn = document.getElementById('modal-confirm-btn');
-const modalCancelBtn = document.getElementById('modal-cancel-btn');
-
+// Global State
 let isGenerating = false;
 let currentStepContainer = null; 
 let currentStreamText = "";
+let currentSessionId = null; // The active chat session ID
 
-// Modal State
-let currentModalAction = null; // 'rename' or 'delete'
-let targetSessionId = null;
+// Icons
+const ICON_SEND = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
+const ICON_STOP = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>`;
 
-// --- Modal Helpers ---
+// --- UI Helpers (Button State) ---
 
-function closeModal() {
-    modalOverlay.classList.remove('visible');
-    currentModalAction = null;
-    targetSessionId = null;
-    modalInput.value = '';
-}
-
-function showRenameModal(id, currentName) {
-    currentModalAction = 'rename';
-    targetSessionId = id;
-    
-    modalTitle.textContent = "Rename Chat";
-    modalMsg.style.display = 'none';
-    
-    modalInput.style.display = 'block';
-    modalInput.value = currentName;
-    
-    modalConfirmBtn.textContent = "Save";
-    modalConfirmBtn.classList.remove('danger');
-    
-    modalOverlay.classList.add('visible');
-    modalInput.focus();
-}
-
-function showDeleteModal(id) {
-    currentModalAction = 'delete';
-    targetSessionId = id;
-    
-    modalTitle.textContent = "Delete Chat";
-    modalMsg.textContent = "Are you sure you want to delete this conversation? This action cannot be undone.";
-    modalMsg.style.display = 'block';
-    
-    modalInput.style.display = 'none';
-    
-    modalConfirmBtn.textContent = "Delete";
-    modalConfirmBtn.classList.add('danger');
-    
-    modalOverlay.classList.add('visible');
-}
-
-// Modal Event Listeners
-modalCancelBtn.onclick = closeModal;
-modalOverlay.onclick = (e) => {
-    if (e.target === modalOverlay) closeModal();
-};
-
-modalConfirmBtn.onclick = () => {
-    if (!targetSessionId) return;
-    
-    if (currentModalAction === 'rename') {
-        const newName = modalInput.value.trim();
-        if (newName) {
-            socket.emit('rename_session', { id: targetSessionId, new_name: newName });
-        }
-    } else if (currentModalAction === 'delete') {
-        socket.emit('delete_session', { id: targetSessionId });
+function toggleSendButtonState(running) {
+    isGenerating = running;
+    if (running) {
+        sendBtn.innerHTML = ICON_STOP;
+        sendBtn.classList.add('stop');
+        sendBtn.title = "Stop Agent";
+    } else {
+        sendBtn.innerHTML = ICON_SEND;
+        sendBtn.classList.remove('stop');
+        sendBtn.title = "Send message";
     }
-    closeModal();
-};
+}
 
-// Handle Enter key in modal input
-modalInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') modalConfirmBtn.click();
-});
-
-
-// --- UI Helpers (Chat) ---
+// --- Chat Render Helpers ---
 
 function createMessageBubble(role, htmlContent = null) {
     const msgDiv = document.createElement('div');
@@ -189,11 +130,56 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
-// --- Socket Events: Chat Lifecycle ---
+
+// --- User Actions ---
+
+sendBtn.addEventListener('click', () => {
+    // STOP ACTION
+    if (isGenerating) {
+        socket.emit('stop_run', { session_id: currentSessionId });
+        return;
+    }
+
+    // SEND ACTION
+    const text = userInput.value.trim();
+    if (!text) return;
+
+    createMessageBubble('user').textContent = text;
+    userInput.value = '';
+    
+    // UI State Update
+    toggleSendButtonState(true);
+    
+    // Emit with Session ID
+    socket.emit('start_run', { 
+        message: text,
+        session_id: currentSessionId 
+    });
+});
+
+userInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault(); 
+        sendBtn.click();    
+    }
+});
+
+
+// --- Socket Events (Lifecycle) ---
 
 socket.on('connect', () => {
     console.log("Connected to server");
     socket.emit('get_history');
+});
+
+socket.on('session_created', (data) => {
+    // Server created a new ID for us (likely because we were on 'New Chat')
+    if (!currentSessionId) {
+        currentSessionId = data.id;
+        console.log(`Assigned new Session ID: ${currentSessionId}`);
+        // Refresh history list so the new chat appears in sidebar
+        socket.emit('get_history');
+    }
 });
 
 socket.on('history_list', (data) => {
@@ -210,9 +196,9 @@ socket.on('history_list', (data) => {
 
     // Populate sessions
     data.sessions.forEach(session => {
-        // Container
         const item = document.createElement('div');
         item.className = 'history-item';
+        if (session.id === currentSessionId) item.classList.add('active');
         
         // Text Content
         const textDiv = document.createElement('div');
@@ -226,38 +212,35 @@ socket.on('history_list', (data) => {
         // Menu Button (...)
         const menuBtn = document.createElement('div');
         menuBtn.className = 'menu-btn';
-        menuBtn.innerHTML = '⋮';
+        menuBtn.textContent = '⋮';
         
         // Context Menu
         const menu = document.createElement('div');
         menu.className = 'context-menu';
         
-        // Rename Option
+        // Rename
         const renameOpt = document.createElement('div');
         renameOpt.className = 'context-menu-item';
         renameOpt.textContent = 'Rename';
         renameOpt.onclick = (e) => {
             e.stopPropagation(); 
             menu.classList.remove('visible');
-            // Trigger Custom Modal
             showRenameModal(session.id, session.preview);
         };
 
-        // Delete Option
+        // Delete
         const deleteOpt = document.createElement('div');
         deleteOpt.className = 'context-menu-item delete';
         deleteOpt.textContent = 'Delete';
         deleteOpt.onclick = (e) => {
             e.stopPropagation(); 
             menu.classList.remove('visible');
-            // Trigger Custom Modal
             showDeleteModal(session.id);
         };
 
         menu.appendChild(renameOpt);
         menu.appendChild(deleteOpt);
 
-        // Toggle Menu Logic
         menuBtn.onclick = (e) => {
             e.stopPropagation();
             document.querySelectorAll('.context-menu.visible').forEach(m => {
@@ -281,11 +264,29 @@ document.addEventListener('click', () => {
 });
 
 function loadSession(id) {
+    if (isGenerating && id !== currentSessionId) {
+        // Optional: Warn user they are leaving a running agent?
+        // For now, we allow it, and the running agent will just work in bg.
+    }
+    
+    currentSessionId = id;
     socket.emit('load_session', { id: id });
+    
+    // Update active class in sidebar immediately for responsiveness
+    document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
+    // We can't easily select the exact element here without re-rendering, 
+    // but the 'reload_chat' or 'history_list' event will handle it soon.
 }
 
 socket.on('reload_chat', (data) => {
     chatContainer.innerHTML = '';
+    
+    // Ensure ID sync if reloading
+    if (data.id) currentSessionId = data.id;
+    else currentSessionId = null; // New chat
+
+    // Reset UI state
+    toggleSendButtonState(false);
     
     data.steps.forEach(step => {
         if ("task" in step) {
@@ -305,7 +306,6 @@ socket.on('reload_chat', (data) => {
                 const container = ensureAgentContainer();
                 const div = document.createElement('div');
                 div.className = 'final-answer';
-                
                 const finalContent = step.action_output || ""; 
 
                 if (step.is_image) {
@@ -321,28 +321,20 @@ socket.on('reload_chat', (data) => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 });
 
-// --- Socket Events: Streaming ---
 
-sendBtn.addEventListener('click', () => {
-    if (isGenerating) return;
-    const text = userInput.value.trim();
-    if (!text) return;
+// --- Socket Events (Streaming & Logic) ---
 
-    createMessageBubble('user').textContent = text;
-    userInput.value = '';
-    isGenerating = true;
-    
-    socket.emit('start_run', { message: text });
-});
-
-userInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); 
-        sendBtn.click();    
-    }
-});
+// EVENT ROUTER: Check session_id before rendering!
+function isForCurrentSession(data) {
+    // If incoming data has no session_id, assume it's global or for current?
+    // Safer to require it. But for backward compat, if data.session_id is undefined, maybe show it?
+    // In our new backend, we ALWAYS send session_id.
+    return data.session_id === currentSessionId;
+}
 
 socket.on('stream_delta', (data) => {
+    if (!isForCurrentSession(data)) return;
+
     const div = getOrCreateStepContainer();
     currentStreamText += data.content;
     div.textContent = currentStreamText; 
@@ -350,6 +342,8 @@ socket.on('stream_delta', (data) => {
 });
 
 socket.on('tool_start', (data) => {
+    if (!isForCurrentSession(data)) return;
+
     const div = getOrCreateStepContainer();
     if (currentStreamText.length < 50) {
         div.innerHTML = `<span class="spinner">⚙️</span> Calling ${data.tool_name}...`;
@@ -357,6 +351,8 @@ socket.on('tool_start', (data) => {
 });
 
 socket.on('action_step', (data) => {
+    if (!isForCurrentSession(data)) return;
+
     renderStep(
         data.step_number, 
         data.model_output, 
@@ -368,6 +364,8 @@ socket.on('action_step', (data) => {
 });
 
 socket.on('final_answer', (data) => {
+    if (!isForCurrentSession(data)) return;
+
     if (currentStepContainer) currentStepContainer.remove();
     const container = ensureAgentContainer();
     const div = document.createElement('div');
@@ -380,10 +378,85 @@ socket.on('final_answer', (data) => {
     }
     container.appendChild(div);
     chatContainer.scrollTop = chatContainer.scrollHeight;
-    isGenerating = false;
     
+    toggleSendButtonState(false);
     socket.emit('get_history');
 });
 
-socket.on('run_complete', () => { isGenerating = false; });
-socket.on('error', (data) => { alert(data.message); isGenerating = false; });
+socket.on('run_complete', (data) => { 
+    // Only reset button if this event belongs to the current view
+    if (data && data.session_id === currentSessionId) {
+        toggleSendButtonState(false); 
+    }
+});
+
+socket.on('error', (data) => { 
+    if (isForCurrentSession(data) || !data.session_id) {
+        alert(data.message); 
+        toggleSendButtonState(false);
+    }
+});
+
+
+// --- Modal Logic (Renaming/Deleting) ---
+// (Kept largely the same, just included for completeness)
+
+const modalOverlay = document.getElementById('modal-overlay');
+const modalTitle = document.getElementById('modal-title');
+const modalMsg = document.getElementById('modal-msg');
+const modalInput = document.getElementById('modal-input');
+const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+const modalCancelBtn = document.getElementById('modal-cancel-btn');
+let currentModalAction = null; 
+let targetSessionId = null;
+
+function closeModal() {
+    modalOverlay.classList.remove('visible');
+    currentModalAction = null;
+    targetSessionId = null;
+    modalInput.value = '';
+}
+
+function showRenameModal(id, currentName) {
+    currentModalAction = 'rename';
+    targetSessionId = id;
+    modalTitle.textContent = "Rename Chat";
+    modalMsg.style.display = 'none';
+    modalInput.style.display = 'block';
+    modalInput.value = currentName;
+    modalConfirmBtn.textContent = "Save";
+    modalConfirmBtn.classList.remove('danger');
+    modalOverlay.classList.add('visible');
+    modalInput.focus();
+}
+
+function showDeleteModal(id) {
+    currentModalAction = 'delete';
+    targetSessionId = id;
+    modalTitle.textContent = "Delete Chat";
+    modalMsg.textContent = "Are you sure? This cannot be undone.";
+    modalMsg.style.display = 'block';
+    modalInput.style.display = 'none';
+    modalConfirmBtn.textContent = "Delete";
+    modalConfirmBtn.classList.add('danger');
+    modalOverlay.classList.add('visible');
+}
+
+modalCancelBtn.onclick = closeModal;
+modalOverlay.onclick = (e) => { if (e.target === modalOverlay) closeModal(); };
+modalConfirmBtn.onclick = () => {
+    if (!targetSessionId) return;
+    if (currentModalAction === 'rename') {
+        const newName = modalInput.value.trim();
+        if (newName) socket.emit('rename_session', { id: targetSessionId, new_name: newName });
+    } else if (currentModalAction === 'delete') {
+        socket.emit('delete_session', { id: targetSessionId });
+        if (targetSessionId === currentSessionId) {
+            socket.emit('new_chat');
+        }
+    }
+    closeModal();
+};
+modalInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') modalConfirmBtn.click();
+});
