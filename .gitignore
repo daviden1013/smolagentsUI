@@ -1,4 +1,5 @@
 .vscode
 chat_history/
 develop/
+test/
 *.pyc
