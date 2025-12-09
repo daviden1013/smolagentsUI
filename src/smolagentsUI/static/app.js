@@ -10,6 +10,7 @@ let isGenerating = false;
 let currentStepContainer = null; 
 let currentStreamText = "";
 let currentSessionId = null; // The active chat session ID
+let agentSpecs = null; // Stores model, tools, and import info
 
 // Icons
 const ICON_SEND = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
@@ -68,6 +69,58 @@ function getOrCreateStepContainer() {
         chatContainer.scrollTop = chatContainer.scrollHeight;
     }
     return currentStepContainer;
+}
+
+function renderWelcomeScreen() {
+    chatContainer.innerHTML = '';
+    
+    if (!agentSpecs) {
+        // Fallback if specs haven't loaded yet
+        chatContainer.innerHTML = `
+            <div class="message system agent-profile">
+                <div class="content">Agent ready. Type a task to begin.</div>
+            </div>`;
+        return;
+    }
+
+    const toolsList = agentSpecs.tools && agentSpecs.tools.length > 0 
+        ? agentSpecs.tools.map(t => `<span style="background:#333; padding:2px 6px; border-radius:4px; font-size:0.9em; margin-right:4px;">${t}</span>`).join('') 
+        : "None";
+
+    const importsList = agentSpecs.imports && agentSpecs.imports.length > 0 
+        ? agentSpecs.imports.map(i => 
+            `<code style="background:#343541; padding:2px 6px; border-radius:4px; font-family:monospace; color: #e0e0e0;">${i}</code>`
+          ).join('') 
+        : "None";
+
+    // Added class 'agent-profile' for easy removal
+    // Added 'margin: auto' for vertical centering
+    const html = `
+        <div class="message system agent-profile" style="margin: auto; width: 100%; max-width: 600px;">
+            <div class="content" style="background-color: #25262b; border: 1px solid #444; border-radius: 12px; padding: 25px; text-align: left;">
+                <h3 style="margin-top:0; border-bottom:1px solid #444; padding-bottom:10px;">Agent Profile</h3>
+                
+                <div style="margin-top:15px;">
+                    <strong>Model:</strong><br>
+                    <span style="color: var(--accent); font-family: monospace;">${agentSpecs.model}</span>
+                </div>
+
+                <div style="margin-top:15px;">
+                    <strong>Available Tools:</strong><br>
+                    <div style="margin-top:5px;">${toolsList}</div>
+                </div>
+
+                <div style="margin-top:15px;">
+                    <strong>Authorized Imports:</strong><br>
+                    <div style="margin-top:5px; display: flex; flex-wrap: wrap; gap: 6px;">
+                        ${importsList}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatContainer.innerHTML = html;
 }
 
 function renderStep(stepNumber, modelOutput, code, logs, images, error) {
@@ -144,6 +197,12 @@ sendBtn.addEventListener('click', () => {
     const text = userInput.value.trim();
     if (!text) return;
 
+    // *** REMOVE AGENT PROFILE IF EXISTS ***
+    const profileMsg = chatContainer.querySelector('.agent-profile');
+    if (profileMsg) {
+        profileMsg.remove();
+    }
+
     createMessageBubble('user').textContent = text;
     userInput.value = '';
     
@@ -170,6 +229,15 @@ userInput.addEventListener('keydown', (e) => {
 socket.on('connect', () => {
     console.log("Connected to server");
     socket.emit('get_history');
+    socket.emit('get_agent_specs'); // Request specs
+});
+
+socket.on('agent_specs', (data) => {
+    agentSpecs = data;
+    // If we are currently in an empty "new chat" state, render the welcome screen now
+    if (!currentSessionId && chatContainer.querySelectorAll('.message').length <= 1) {
+        renderWelcomeScreen();
+    }
 });
 
 socket.on('session_created', (data) => {
@@ -266,7 +334,6 @@ document.addEventListener('click', () => {
 function loadSession(id) {
     if (isGenerating && id !== currentSessionId) {
         // Optional: Warn user they are leaving a running agent?
-        // For now, we allow it, and the running agent will just work in bg.
     }
     
     currentSessionId = id;
@@ -274,8 +341,6 @@ function loadSession(id) {
     
     // Update active class in sidebar immediately for responsiveness
     document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
-    // We can't easily select the exact element here without re-rendering, 
-    // but the 'reload_chat' or 'history_list' event will handle it soon.
 }
 
 socket.on('reload_chat', (data) => {
@@ -287,6 +352,12 @@ socket.on('reload_chat', (data) => {
 
     // Reset UI state
     toggleSendButtonState(false);
+
+    // If no steps, it's a new chat -> Show Specs
+    if (!data.steps || data.steps.length === 0) {
+        renderWelcomeScreen();
+        return;
+    }
     
     data.steps.forEach(step => {
         if ("task" in step) {
@@ -326,9 +397,6 @@ socket.on('reload_chat', (data) => {
 
 // EVENT ROUTER: Check session_id before rendering!
 function isForCurrentSession(data) {
-    // If incoming data has no session_id, assume it's global or for current?
-    // Safer to require it. But for backward compat, if data.session_id is undefined, maybe show it?
-    // In our new backend, we ALWAYS send session_id.
     return data.session_id === currentSessionId;
 }
 

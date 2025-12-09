@@ -71,6 +71,54 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
         summary_list = conversation_manager.get_session_summaries()
         emit('history_list', {'sessions': summary_list})
 
+    @socketio.on('get_agent_specs')
+    def handle_get_agent_specs():
+        """Extracts and sends the prototype agent's specs to the UI."""
+        specs = {
+            'model': 'Unknown Model',
+            'tools': [],
+            'imports': []
+        }
+        
+        if prototype_agent:
+            # Model Name
+            try:
+                if hasattr(prototype_agent.model, 'model_id'):
+                    specs['model'] = prototype_agent.model.model_id
+                elif hasattr(prototype_agent.model, 'id'):
+                    specs['model'] = prototype_agent.model.id
+                else:
+                    specs['model'] = str(type(prototype_agent.model).__name__)
+            except Exception:
+                specs['model'] = "Could not retrieve model ID"
+
+            # Tools
+            try:
+                # agent.tools is typically a dict {name: tool_obj}
+                if isinstance(prototype_agent.tools, dict):
+                    specs['tools'] = list(prototype_agent.tools.keys())
+                elif isinstance(prototype_agent.tools, list):
+                    # Handle case where it might be a list of objects with a 'name' attribute
+                    specs['tools'] = [t.name for t in prototype_agent.tools if hasattr(t, 'name')]
+            except Exception:
+                pass
+
+            # Imports
+            try:
+                # Combine standard authorized imports and any additional ones
+                base_imports = getattr(prototype_agent, 'authorized_imports', [])
+                add_imports = getattr(prototype_agent, 'additional_authorized_imports', [])
+                # Ensure they are lists before combining
+                base_imports = list(base_imports) if base_imports else []
+                add_imports = list(add_imports) if add_imports else []
+                
+                unique_imports = list(set(base_imports + add_imports))
+                specs['imports'] = unique_imports
+            except Exception:
+                pass
+        
+        emit('agent_specs', specs)
+
     @socketio.on('new_chat')
     def handle_new_chat():
         # Just tell UI to clear; backend will lazy-create the agent when run starts
