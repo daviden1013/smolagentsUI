@@ -64,6 +64,28 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
         current_agent_wrapper.load_memory(session.get("steps", []))
         emit('reload_chat', session)
 
+    @socketio.on('rename_session')
+    def handle_rename_session(data):
+        session_id = data.get('id')
+        new_name = data.get('new_name')
+        if conversation_manager.rename_session(session_id, new_name):
+            # Refresh the list for all clients
+            emit('history_list', {'sessions': conversation_manager.get_session_summaries()})
+
+    @socketio.on('delete_session')
+    def handle_delete_session(data):
+        global current_session_id
+        session_id = data.get('id')
+        
+        if conversation_manager.delete_session(session_id):
+            # If we deleted the active session, clear the screen
+            if current_session_id == session_id:
+                current_session_id = None
+                current_agent_wrapper.clear_memory()
+                emit('reload_chat', {'steps': []})
+            
+            emit('history_list', {'sessions': conversation_manager.get_session_summaries()})
+
     @socketio.on('start_run')
     def handle_run(data):
         global current_session_id

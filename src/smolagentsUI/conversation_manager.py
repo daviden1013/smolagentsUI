@@ -92,3 +92,22 @@ class ConversationManager:
         # Persist to disk
         self._save_to_disk()
         return session_id
+    
+    def rename_session(self, session_id: str, new_name: str) -> bool:
+        """ Renames a session in memory (cache) and persists to disk. """
+        session = self.get_session(session_id)
+        if session:
+            session["preview"] = new_name
+            self._save_to_disk()
+            return True
+        return False
+
+    def delete_session(self, session_id: str) -> bool:
+        """ Deletes a session from memory and persists to disk. """
+        initial_len = len(self.sessions_cache)
+        self.sessions_cache = [s for s in self.sessions_cache if s["id"] != session_id]
+        
+        if len(self.sessions_cache) < initial_len:
+            self._save_to_disk()
+            return True
+        return False

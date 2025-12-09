@@ -5,11 +5,91 @@ const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const historyList = document.getElementById('history-list');
 
+// Modal Elements
+const modalOverlay = document.getElementById('modal-overlay');
+const modalTitle = document.getElementById('modal-title');
+const modalMsg = document.getElementById('modal-msg');
+const modalInput = document.getElementById('modal-input');
+const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
 let isGenerating = false;
 let currentStepContainer = null; 
 let currentStreamText = "";
 
-// --- UI Helpers ---
+// Modal State
+let currentModalAction = null; // 'rename' or 'delete'
+let targetSessionId = null;
+
+// --- Modal Helpers ---
+
+function closeModal() {
+    modalOverlay.classList.remove('visible');
+    currentModalAction = null;
+    targetSessionId = null;
+    modalInput.value = '';
+}
+
+function showRenameModal(id, currentName) {
+    currentModalAction = 'rename';
+    targetSessionId = id;
+    
+    modalTitle.textContent = "Rename Chat";
+    modalMsg.style.display = 'none';
+    
+    modalInput.style.display = 'block';
+    modalInput.value = currentName;
+    
+    modalConfirmBtn.textContent = "Save";
+    modalConfirmBtn.classList.remove('danger');
+    
+    modalOverlay.classList.add('visible');
+    modalInput.focus();
+}
+
+function showDeleteModal(id) {
+    currentModalAction = 'delete';
+    targetSessionId = id;
+    
+    modalTitle.textContent = "Delete Chat";
+    modalMsg.textContent = "Are you sure you want to delete this conversation? This action cannot be undone.";
+    modalMsg.style.display = 'block';
+    
+    modalInput.style.display = 'none';
+    
+    modalConfirmBtn.textContent = "Delete";
+    modalConfirmBtn.classList.add('danger');
+    
+    modalOverlay.classList.add('visible');
+}
+
+// Modal Event Listeners
+modalCancelBtn.onclick = closeModal;
+modalOverlay.onclick = (e) => {
+    if (e.target === modalOverlay) closeModal();
+};
+
+modalConfirmBtn.onclick = () => {
+    if (!targetSessionId) return;
+    
+    if (currentModalAction === 'rename') {
+        const newName = modalInput.value.trim();
+        if (newName) {
+            socket.emit('rename_session', { id: targetSessionId, new_name: newName });
+        }
+    } else if (currentModalAction === 'delete') {
+        socket.emit('delete_session', { id: targetSessionId });
+    }
+    closeModal();
+};
+
+// Handle Enter key in modal input
+modalInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') modalConfirmBtn.click();
+});
+
+
+// --- UI Helpers (Chat) ---
 
 function createMessageBubble(role, htmlContent = null) {
     const msgDiv = document.createElement('div');
@@ -35,7 +115,6 @@ function ensureAgentContainer() {
     return lastMsg.querySelector('.content');
 }
 
-// Creates a placeholder for streaming text
 function getOrCreateStepContainer() {
     if (!currentStepContainer) {
         const container = ensureAgentContainer();
@@ -51,21 +130,17 @@ function getOrCreateStepContainer() {
 }
 
 function renderStep(stepNumber, modelOutput, code, logs, images, error) {
-    // 1. Determine where to put the step
     let container;
     
     if (currentStepContainer) {
-        // LIVE MODE: Replace the "Thinking..." box
         container = currentStepContainer.parentElement;
         currentStepContainer.remove();
         currentStepContainer = null;
         currentStreamText = "";
     } else {
-        // HISTORY MODE: Just append to the last agent bubble
         container = ensureAgentContainer();
     }
 
-    // 2. Create the collapsible details
     const details = document.createElement('details');
     details.className = 'step';
     if(error) details.classList.add('error');
@@ -78,17 +153,13 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     
     let htmlContent = "";
     
-    // Add the model output (thought) - Filter out raw <code> tags!
     if (modelOutput) {
-        // Regex matches <code>...</code> (non-greedy) including newlines
         const thoughtContent = modelOutput.replace(/<code>[\s\S]*?<\/code>/g, "").trim();
-        
         if (thoughtContent) {
             htmlContent += `<div class="model-output" style="margin-bottom: 10px; border-bottom: 1px dashed #444; padding-bottom: 10px;">${marked.parse(thoughtContent)}</div>`;
         }
     }
 
-    // Wrap code in python markdown fences for nice rendering
     if (code) {
         const fencedCode = "```python\n" + code + "\n```";
         htmlContent += `<div class="code-block">${marked.parse(fencedCode)}</div>`;
@@ -98,7 +169,6 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     
     if (images && images.length > 0) {
         images.forEach(img => {
-            // Check if it's a full data URL or just base64
             const src = img.startsWith('data:') ? img : `data:image/png;base64,${img}`;
             htmlContent += `<br><img src="${src}" class="agent-image"><br>`;
         });
@@ -112,7 +182,6 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     
     container.appendChild(details);
 
-    // 3. Highlight code blocks inside this step
     details.querySelectorAll('pre code').forEach((block) => {
         hljs.highlightElement(block);
     });
@@ -124,14 +193,13 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
 
 socket.on('connect', () => {
     console.log("Connected to server");
-    // Request history list immediately on connect
     socket.emit('get_history');
 });
 
 socket.on('history_list', (data) => {
-    historyList.innerHTML = ''; // Clear current list
+    historyList.innerHTML = ''; 
     
-    // Add "New Chat" button at the top
+    // "New Chat" button
     const newChatBtn = document.createElement('div');
     newChatBtn.className = 'history-item new-chat';
     newChatBtn.innerHTML = '+ New Chat';
@@ -142,14 +210,73 @@ socket.on('history_list', (data) => {
 
     // Populate sessions
     data.sessions.forEach(session => {
+        // Container
         const item = document.createElement('div');
         item.className = 'history-item';
-        item.innerHTML = `
+        
+        // Text Content
+        const textDiv = document.createElement('div');
+        textDiv.className = 'history-item-text';
+        textDiv.innerHTML = `
             <div style="font-weight:bold">${session.preview}</div>
             <div style="font-size:0.8em; opacity:0.7">${session.timestamp}</div>
         `;
-        item.onclick = () => loadSession(session.id);
+        textDiv.onclick = () => loadSession(session.id);
+        
+        // Menu Button (...)
+        const menuBtn = document.createElement('div');
+        menuBtn.className = 'menu-btn';
+        menuBtn.innerHTML = '⋮';
+        
+        // Context Menu
+        const menu = document.createElement('div');
+        menu.className = 'context-menu';
+        
+        // Rename Option
+        const renameOpt = document.createElement('div');
+        renameOpt.className = 'context-menu-item';
+        renameOpt.textContent = 'Rename';
+        renameOpt.onclick = (e) => {
+            e.stopPropagation(); 
+            menu.classList.remove('visible');
+            // Trigger Custom Modal
+            showRenameModal(session.id, session.preview);
+        };
+
+        // Delete Option
+        const deleteOpt = document.createElement('div');
+        deleteOpt.className = 'context-menu-item delete';
+        deleteOpt.textContent = 'Delete';
+        deleteOpt.onclick = (e) => {
+            e.stopPropagation(); 
+            menu.classList.remove('visible');
+            // Trigger Custom Modal
+            showDeleteModal(session.id);
+        };
+
+        menu.appendChild(renameOpt);
+        menu.appendChild(deleteOpt);
+
+        // Toggle Menu Logic
+        menuBtn.onclick = (e) => {
+            e.stopPropagation();
+            document.querySelectorAll('.context-menu.visible').forEach(m => {
+                if (m !== menu) m.classList.remove('visible');
+            });
+            menu.classList.toggle('visible');
+        };
+
+        item.appendChild(textDiv);
+        item.appendChild(menuBtn);
+        item.appendChild(menu);
         historyList.appendChild(item);
+    });
+});
+
+// Close context menus when clicking elsewhere
+document.addEventListener('click', () => {
+    document.querySelectorAll('.context-menu.visible').forEach(m => {
+        m.classList.remove('visible');
     });
 });
 
@@ -158,10 +285,8 @@ function loadSession(id) {
 }
 
 socket.on('reload_chat', (data) => {
-    // Clear the chat window
     chatContainer.innerHTML = '';
     
-    // Iterate through steps and render
     data.steps.forEach(step => {
         if ("task" in step) {
             createMessageBubble('user').textContent = step.task;
@@ -169,14 +294,13 @@ socket.on('reload_chat', (data) => {
         else if ("step_number" in step) {
             renderStep(
                 step.step_number, 
-                step.model_output, // Pass model output
+                step.model_output,
                 step.code_action, 
                 step.observations, 
                 step.images, 
                 step.error
             );
             
-        
             if (step.is_final_answer) {
                 const container = ensureAgentContainer();
                 const div = document.createElement('div');
@@ -197,7 +321,6 @@ socket.on('reload_chat', (data) => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 });
 
-
 // --- Socket Events: Streaming ---
 
 sendBtn.addEventListener('click', () => {
@@ -212,11 +335,10 @@ sendBtn.addEventListener('click', () => {
     socket.emit('start_run', { message: text });
 });
 
-// Handle Enter key to send, Shift+Enter for newline
 userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault(); // Prevent the default newline insertion
-        sendBtn.click();    // Trigger the send logic
+        e.preventDefault(); 
+        sendBtn.click();    
     }
 });
 
@@ -237,7 +359,7 @@ socket.on('tool_start', (data) => {
 socket.on('action_step', (data) => {
     renderStep(
         data.step_number, 
-        data.model_output, // Pass model output
+        data.model_output, 
         data.code_action, 
         data.observations, 
         data.images, 
@@ -260,7 +382,6 @@ socket.on('final_answer', (data) => {
     chatContainer.scrollTop = chatContainer.scrollHeight;
     isGenerating = false;
     
-    // Refresh history list to show the new save
     socket.emit('get_history');
 });
 

@@ -47,6 +47,21 @@
             </div>
         </div>
     </div>
+
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal-box">
+            <h3 id="modal-title">Title</h3>
+            <div class="modal-content">
+                <p id="modal-msg" style="display:none"></p>
+                <input type="text" id="modal-input" class="modal-input" style="display:none" autocomplete="off">
+            </div>
+            <div class="modal-footer">
+                <button id="modal-cancel-btn" class="modal-btn cancel">Cancel</button>
+                <button id="modal-confirm-btn" class="modal-btn confirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
