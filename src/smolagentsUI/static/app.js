@@ -385,6 +385,11 @@ socket.on('reload_chat', (data) => {
                 } else {
                     div.innerHTML = marked.parse(String(finalContent));
                 }
+                
+                div.querySelectorAll('pre code').forEach((block) => {
+                    hljs.highlightElement(block);
+                });
+
                 container.appendChild(div);
             }
         }
