@@ -183,6 +183,30 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
+/**
+ * Helper to render the final answer.
+ * Detects if the content is a base64 image or markdown text.
+ */
+function renderFinalAnswer(container, content) {
+    const div = document.createElement('div');
+    div.className = 'final-answer';
+    
+    const contentStr = String(content || "");
+    
+    // Check if content looks like a base64 image data URI
+    if (contentStr.trim().startsWith('data:image')) {
+        div.innerHTML = `<strong>Final Answer:</strong><br><img src="${contentStr}" class="agent-image">`;
+    } else {
+        div.innerHTML = marked.parse(contentStr);
+    }
+    
+    div.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightElement(block);
+    });
+
+    container.appendChild(div);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
 
 // --- User Actions ---
 
@@ -375,22 +399,8 @@ socket.on('reload_chat', (data) => {
             
             if (step.is_final_answer) {
                 const container = ensureAgentContainer();
-                const div = document.createElement('div');
-                div.className = 'final-answer';
-                const finalContent = step.action_output || ""; 
-
-                if (step.is_image) {
-                    const src = finalContent.startsWith('data:') ? finalContent : `data:image/png;base64,${finalContent}`;
-                    div.innerHTML = `<strong>Final Answer:</strong><br><img src="${src}" class="agent-image">`;
-                } else {
-                    div.innerHTML = marked.parse(String(finalContent));
-                }
-                
-                div.querySelectorAll('pre code').forEach((block) => {
-                    hljs.highlightElement(block);
-                });
-
-                container.appendChild(div);
+                // Use the shared helper to render
+                renderFinalAnswer(container, step.action_output);
             }
         }
     });
@@ -441,17 +451,10 @@ socket.on('final_answer', (data) => {
 
     if (currentStepContainer) currentStepContainer.remove();
     const container = ensureAgentContainer();
-    const div = document.createElement('div');
-    div.className = 'final-answer';
     
-    if (data.type === 'image') {
-        div.innerHTML = `<strong>Final Answer:</strong><br><img src="${data.content}" class="agent-image">`;
-    } else {
-        div.innerHTML = marked.parse(data.content);
-    }
-    container.appendChild(div);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
-    
+    // Use the shared helper to render
+    renderFinalAnswer(container, data.content);
+
     toggleSendButtonState(false);
     socket.emit('get_history');
 });
@@ -472,7 +475,6 @@ socket.on('error', (data) => {
 
 
 // --- Modal Logic (Renaming/Deleting) ---
-// (Kept largely the same, just included for completeness)
 
 const modalOverlay = document.getElementById('modal-overlay');
 const modalTitle = document.getElementById('modal-title');
