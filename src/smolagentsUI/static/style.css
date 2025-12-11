@@ -358,8 +358,13 @@ img.agent-image { max-width: 100%; border-radius: 8px; margin-top: 10px; }
     display: flex; flex-direction: column; gap: 15px;
 }
 .modal-input {
-    width: 100%; padding: 10px; border-radius: 5px;
-    border: 1px solid var(--border); background-color: #222; color: white;
+    width: 100%; 
+    padding: 10px; 
+    border-radius: 5px;
+    border: 1px solid var(--border); 
+    background-color: #222; 
+    color: white;
+    box-sizing: border-box; 
 }
 .modal-footer { display: flex; justify-content: flex-end; gap: 10px; }
 .modal-btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; color: white;}
