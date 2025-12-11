@@ -1,6 +1,7 @@
 import io
 import base64
 from typing import Generator, List, Dict, Any, Optional
+from .utils import serialize_step
 
 # smolagents imports
 from smolagents.memory import (
@@ -29,7 +30,7 @@ class AgentWrapper:
         """
         Serializes the current agent memory into a list of dictionaries.
         """
-        return self.agent.memory.get_full_steps()
+        return [serialize_step(step) for step in self.agent.memory.steps]
 
     def load_memory(self, steps_data: List[Dict]):
         """
@@ -52,8 +53,8 @@ class AgentWrapper:
                     for tc in step_data["tool_calls"]:
                         tool_calls.append(ToolCall(
                             id=tc["id"],
-                            name=tc["function"]["name"],
-                            arguments=tc["function"]["arguments"]
+                            name=tc["name"],
+                            arguments=tc["arguments"]
                         ))
 
                 # Reconstruct ChatMessages
@@ -138,7 +139,7 @@ class AgentWrapper:
                 if step.is_final_answer:
                     final_step_obj = step
                     yield {'type': 'final_answer', 
-                        'content': str(step.action_output)
+                        'content': serialize_step(step.action_output)
                         }
                     
             # Planning
