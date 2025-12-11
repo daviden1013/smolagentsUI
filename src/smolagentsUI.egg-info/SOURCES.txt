@@ -1,8 +1,0 @@
-pyproject.toml
-src/smolagentsUI/__init__.py
-src/smolagentsUI/server.py
-src/smolagentsUI.egg-info/PKG-INFO
-src/smolagentsUI.egg-info/SOURCES.txt
-src/smolagentsUI.egg-info/dependency_links.txt
-src/smolagentsUI.egg-info/requires.txt
-src/smolagentsUI.egg-info/top_level.txt
