@@ -6,6 +6,10 @@ authors = ["Enshuo (David) Hsu"]
 license = "MIT"
 readme = "README.md"
 
+packages = [
+    { include = "smolagentsUI", from = "src" }
+]
+
 exclude = [
     "test/**",
     "develop/**",
