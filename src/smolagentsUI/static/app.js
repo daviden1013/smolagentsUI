@@ -290,6 +290,7 @@ socket.on('history_list', (data) => {
     data.sessions.forEach(session => {
         const item = document.createElement('div');
         item.className = 'history-item';
+        item.dataset.id = session.id;
         if (session.id === currentSessionId) item.classList.add('active');
         
         // Text Content
@@ -361,13 +362,26 @@ function loadSession(id) {
     }
     
     currentSessionId = id;
+
+    // 1. Immediate Sidebar Update
+    document.querySelectorAll('.history-item').forEach(el => {
+        if (el.dataset.id === id) {
+            el.classList.add('active');
+        } else {
+            el.classList.remove('active');
+        }
+    });
+
+    // 2. Trigger Loading Effect (Blur)
+    chatContainer.classList.add('loading');
+
+    // 3. Request Data
     socket.emit('load_session', { id: id });
-    
-    // Update active class in sidebar immediately for responsiveness
-    document.querySelectorAll('.history-item').forEach(el => el.classList.remove('active'));
 }
 
 socket.on('reload_chat', (data) => {
+    chatContainer.classList.remove('loading');
+
     chatContainer.innerHTML = '';
     
     // Ensure ID sync if reloading

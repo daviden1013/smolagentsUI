@@ -157,6 +157,14 @@ body {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    transition: filter 0.2s ease, opacity 0.2s ease;
+}
+
+.chat-container.loading {
+    filter: blur(4px);
+    opacity: 0.6;
+    pointer-events: none; 
+    user-select: none;
 }
 
 /* Message Wrappers */
