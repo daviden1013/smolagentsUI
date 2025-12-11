@@ -1,22 +1,25 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "smolagentsUI"
 version = "0.1.0"
-description = "A lightweight Flask-based UI for smolagents"
+description = "A lightweight UI for smolagents"
+authors = ["Enshuo (David) Hsu"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.10"
-dependencies = [
-    "flask>=3.0.0",
-    "flask-socketio>=5.3.0",
-    "simple-websocket>=0.10.0",
-    "smolagents"
-]
-authors = [
-  { name="Your Name", email="your.email@example.com" },
+
+exclude = [
+    "test/**",
+    "develop/**",
+    "demo/**",
+    "chat_history/**"
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.poetry.dependencies]
+python = "^3.11"
+flask = "^3.0.0"
+flask-socketio = "^5.3.0"
+simple-websocket = "^0.10.0"
+smolagents = "^1.23.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
