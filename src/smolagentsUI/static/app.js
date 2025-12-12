@@ -9,8 +9,22 @@ const historyList = document.getElementById('history-list');
 let isGenerating = false;
 let currentStepContainer = null; 
 let currentStreamText = "";
-let currentSessionId = null; // The active chat session ID
-let agentSpecs = null; // Stores model, tools, and import info
+let currentSessionId = null; 
+let agentSpecs = null; 
+
+// --- Smart Scroll Logic ---
+let isUserAtBottom = true; // Default to true so it scrolls initially
+
+chatContainer.addEventListener('scroll', () => {
+    const threshold = 50; // pixels from bottom to be considered "at bottom"
+    isUserAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight <= threshold;
+});
+
+function scrollToBottom(force = false) {
+    if (force || isUserAtBottom) {
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+}
 
 // Icons
 const ICON_SEND = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>`;
@@ -45,7 +59,10 @@ function createMessageBubble(role, htmlContent = null) {
     
     msgDiv.appendChild(contentDiv);
     chatContainer.appendChild(msgDiv);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Force scroll if it's a user message, otherwise use smart scroll
+    scrollToBottom(role === 'user');
+    
     return contentDiv;
 }
 
@@ -66,7 +83,8 @@ function getOrCreateStepContainer() {
         container.appendChild(thinkingDiv);
         currentStepContainer = thinkingDiv;
         currentStreamText = "";
-        chatContainer.scrollTop = chatContainer.scrollHeight;
+        
+        scrollToBottom();
     }
     return currentStepContainer;
 }
@@ -75,7 +93,6 @@ function renderWelcomeScreen() {
     chatContainer.innerHTML = '';
     
     if (!agentSpecs) {
-        // Fallback if specs haven't loaded yet
         chatContainer.innerHTML = `
             <div class="message system agent-profile">
                 <div class="content">Agent ready. Type a task to begin.</div>
@@ -93,8 +110,6 @@ function renderWelcomeScreen() {
           ).join('') 
         : "None";
 
-    // Added class 'agent-profile' for easy removal
-    // Added 'margin: auto' for vertical centering
     const html = `
         <div class="message system agent-profile" style="margin: auto; width: 100%; max-width: 600px;">
             <div class="content" style="background-color: #25262b; border: 1px solid #444; border-radius: 12px; padding: 25px; text-align: left;">
@@ -180,7 +195,7 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
         hljs.highlightElement(block);
     });
     
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    scrollToBottom();
 }
 
 /**
@@ -190,46 +205,39 @@ function renderContentRecursive(container, content) {
     if (content === null || content === undefined) return;
 
     if (Array.isArray(content)) {
-        // --- Array Handling ---
         content.forEach(item => {
             const wrapper = document.createElement('div');
             wrapper.style.marginBottom = '15px';
             wrapper.style.paddingLeft = '10px';
-            wrapper.style.borderLeft = '2px solid #444'; // Visual separator for list items
+            wrapper.style.borderLeft = '2px solid #444'; 
             renderContentRecursive(wrapper, item);
             container.appendChild(wrapper);
         });
     } else if (typeof content === 'object') {
-        // --- Object/Dict Handling ---
         Object.entries(content).forEach(([key, value]) => {
             const wrapper = document.createElement('div');
             wrapper.style.marginBottom = '15px';
             
-            // Key Label (e.g. "fig class distribution:")
             const label = document.createElement('div');
             label.style.fontWeight = 'bold';
             label.style.marginBottom = '6px';
-            label.style.color = '#b4b4b4'; // text-secondary color
+            label.style.color = '#b4b4b4'; 
             label.style.fontSize = '0.9em';
             label.style.textTransform = 'capitalize';
             label.textContent = key.replace(/_/g, ' ') + ':';
             
             wrapper.appendChild(label);
 
-            // Value Container
             const valContainer = document.createElement('div');
-            valContainer.style.marginLeft = '10px'; // Indent content
+            valContainer.style.marginLeft = '10px'; 
             renderContentRecursive(valContainer, value);
             wrapper.appendChild(valContainer);
             
             container.appendChild(wrapper);
         });
     } else {
-        // --- Primitive Handling (String, Number, Boolean) ---
         const str = String(content);
-        
         if (str.trim().startsWith('data:image')) {
-            // Render Base64 Image
             const img = document.createElement('img');
             img.src = str;
             img.className = 'agent-image';
@@ -238,10 +246,8 @@ function renderContentRecursive(container, content) {
             img.style.border = '1px solid #444';
             container.appendChild(img);
         } else {
-            // Render Markdown
             const textDiv = document.createElement('div');
             textDiv.innerHTML = marked.parse(str);
-            // Remove bottom margin from the last paragraph for tighter spacing
             textDiv.querySelectorAll('p:last-child').forEach(p => p.style.marginBottom = '0');
             container.appendChild(textDiv);
         }
@@ -250,13 +256,11 @@ function renderContentRecursive(container, content) {
 
 /**
  * Helper to render the final answer.
- * Detects if the content is a base64 image, markdown text, or a complex object.
  */
 function renderFinalAnswer(container, content) {
     const div = document.createElement('div');
     div.className = 'final-answer';
     
-    // Header
     const header = document.createElement('div');
     header.innerHTML = '<strong>Final Answer:</strong>';
     header.style.marginBottom = '12px';
@@ -264,16 +268,14 @@ function renderFinalAnswer(container, content) {
     header.style.paddingBottom = '8px';
     div.appendChild(header);
 
-    // Recursively render content
     renderContentRecursive(div, content);
     
-    // Highlight any code blocks generated by marked
     div.querySelectorAll('pre code').forEach((block) => {
         hljs.highlightElement(block);
     });
 
     container.appendChild(div);
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    scrollToBottom();
 }
 
 // --- User Actions ---
@@ -289,7 +291,6 @@ sendBtn.addEventListener('click', () => {
     const text = userInput.value.trim();
     if (!text) return;
 
-    // *** REMOVE AGENT PROFILE IF EXISTS ***
     const profileMsg = chatContainer.querySelector('.agent-profile');
     if (profileMsg) {
         profileMsg.remove();
@@ -298,10 +299,8 @@ sendBtn.addEventListener('click', () => {
     createMessageBubble('user').textContent = text;
     userInput.value = '';
     
-    // UI State Update
     toggleSendButtonState(true);
     
-    // Emit with Session ID
     socket.emit('start_run', { 
         message: text,
         session_id: currentSessionId 
@@ -321,23 +320,20 @@ userInput.addEventListener('keydown', (e) => {
 socket.on('connect', () => {
     console.log("Connected to server");
     socket.emit('get_history');
-    socket.emit('get_agent_specs'); // Request specs
+    socket.emit('get_agent_specs'); 
 });
 
 socket.on('agent_specs', (data) => {
     agentSpecs = data;
-    // If we are currently in an empty "new chat" state, render the welcome screen now
     if (!currentSessionId && chatContainer.querySelectorAll('.message').length <= 1) {
         renderWelcomeScreen();
     }
 });
 
 socket.on('session_created', (data) => {
-    // Server created a new ID for us (likely because we were on 'New Chat')
     if (!currentSessionId) {
         currentSessionId = data.id;
         console.log(`Assigned new Session ID: ${currentSessionId}`);
-        // Refresh history list so the new chat appears in sidebar
         socket.emit('get_history');
     }
 });
@@ -345,7 +341,6 @@ socket.on('session_created', (data) => {
 socket.on('history_list', (data) => {
     historyList.innerHTML = ''; 
     
-    // "New Chat" button
     const newChatBtn = document.createElement('div');
     newChatBtn.className = 'history-item new-chat';
     newChatBtn.innerHTML = '+ New Chat';
@@ -354,14 +349,12 @@ socket.on('history_list', (data) => {
     };
     historyList.appendChild(newChatBtn);
 
-    // Populate sessions
     data.sessions.forEach(session => {
         const item = document.createElement('div');
         item.className = 'history-item';
         item.dataset.id = session.id;
         if (session.id === currentSessionId) item.classList.add('active');
         
-        // Text Content
         const textDiv = document.createElement('div');
         textDiv.className = 'history-item-text';
         textDiv.innerHTML = `
@@ -370,16 +363,13 @@ socket.on('history_list', (data) => {
         `;
         textDiv.onclick = () => loadSession(session.id);
         
-        // Menu Button (...)
         const menuBtn = document.createElement('div');
         menuBtn.className = 'menu-btn';
         menuBtn.textContent = '⋮';
         
-        // Context Menu
         const menu = document.createElement('div');
         menu.className = 'context-menu';
         
-        // Rename
         const renameOpt = document.createElement('div');
         renameOpt.className = 'context-menu-item';
         renameOpt.textContent = 'Rename';
@@ -389,7 +379,6 @@ socket.on('history_list', (data) => {
             showRenameModal(session.id, session.preview);
         };
 
-        // Delete
         const deleteOpt = document.createElement('div');
         deleteOpt.className = 'context-menu-item delete';
         deleteOpt.textContent = 'Delete';
@@ -417,7 +406,6 @@ socket.on('history_list', (data) => {
     });
 });
 
-// Close context menus when clicking elsewhere
 document.addEventListener('click', () => {
     document.querySelectorAll('.context-menu.visible').forEach(m => {
         m.classList.remove('visible');
@@ -426,12 +414,10 @@ document.addEventListener('click', () => {
 
 function loadSession(id) {
     if (isGenerating && id !== currentSessionId) {
-        // Optional: Warn user they are leaving a running agent?
     }
     
     currentSessionId = id;
 
-    // 1. Immediate Sidebar Update
     document.querySelectorAll('.history-item').forEach(el => {
         if (el.dataset.id === id) {
             el.classList.add('active');
@@ -440,10 +426,7 @@ function loadSession(id) {
         }
     });
 
-    // 2. Trigger Loading Effect (Blur)
     chatContainer.classList.add('loading');
-
-    // 3. Request Data
     socket.emit('load_session', { id: id });
 }
 
@@ -452,14 +435,11 @@ socket.on('reload_chat', (data) => {
 
     chatContainer.innerHTML = '';
     
-    // Ensure ID sync if reloading
     if (data.id) currentSessionId = data.id;
-    else currentSessionId = null; // New chat
+    else currentSessionId = null; 
 
-    // Reset UI state
     toggleSendButtonState(false);
 
-    // If no steps, it's a new chat -> Show Specs
     if (!data.steps || data.steps.length === 0) {
         renderWelcomeScreen();
         return;
@@ -481,18 +461,18 @@ socket.on('reload_chat', (data) => {
             
             if (step.is_final_answer) {
                 const container = ensureAgentContainer();
-                // Use the shared helper to render
                 renderFinalAnswer(container, step.action_output);
             }
         }
     });
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    // Always force scroll to bottom on reload
+    scrollToBottom(true);
 });
 
 
 // --- Socket Events (Streaming & Logic) ---
 
-// EVENT ROUTER: Check session_id before rendering!
 function isForCurrentSession(data) {
     return data.session_id === currentSessionId;
 }
@@ -503,7 +483,8 @@ socket.on('stream_delta', (data) => {
     const div = getOrCreateStepContainer();
     currentStreamText += data.content;
     div.textContent = currentStreamText; 
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    
+    scrollToBottom();
 });
 
 socket.on('tool_start', (data) => {
@@ -513,6 +494,7 @@ socket.on('tool_start', (data) => {
     if (currentStreamText.length < 50) {
         div.innerHTML = `<span class="spinner">⚙️</span> Calling ${data.tool_name}...`;
     }
+    // getOrCreateStepContainer handles the scroll
 });
 
 socket.on('action_step', (data) => {
@@ -534,7 +516,6 @@ socket.on('final_answer', (data) => {
     if (currentStepContainer) currentStepContainer.remove();
     const container = ensureAgentContainer();
     
-    // Use the shared helper to render
     renderFinalAnswer(container, data.content);
 
     toggleSendButtonState(false);
@@ -542,7 +523,6 @@ socket.on('final_answer', (data) => {
 });
 
 socket.on('run_complete', (data) => { 
-    // Only reset button if this event belongs to the current view
     if (data && data.session_id === currentSessionId) {
         toggleSendButtonState(false); 
     }
