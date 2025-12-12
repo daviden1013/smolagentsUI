@@ -1,7 +1,5 @@
 from smolagents import CodeAgent, OpenAIModel, Tool
-import smolagentsUI
 import pandas as pd
-
 
 class DataLoaderTool(Tool):
     name = "data_loader"
@@ -17,12 +15,13 @@ class DataLoaderTool(Tool):
         return self.df
     
 df = pd.read_csv('./demo/data/breast-cancer.data.csv')
+data_loader_tool = DataLoaderTool(df=df)
 
 model = OpenAIModel(model_id="openai/gpt-oss-120b",
                     api_key="", 
                     api_base="http://localhost:8000/v1")
 
-agent = CodeAgent(tools=[DataLoaderTool(df)], 
+agent = CodeAgent(tools=[], 
                   model=model, executor_type='local', 
                   additional_authorized_imports = ["pandas", "numpy", "tableone", "sklearn", "sklearn.*", "matplotlib", "matplotlib.*", "PIL", "PIL.*"],
                   stream_outputs=True)
@@ -39,5 +38,8 @@ Additional Instructions:
 # Append the additional instructions to system prompt
 agent.prompt_templates["system_prompt"] = agent.prompt_templates["system_prompt"] + additional_system_instructions
 
-smolagentsUI.serve(agent, host="0.0.0.0", storage_path="./chat_history/mychat.db")
+import smolagentsUI
+smolagentsUI.serve(agent, host="0.0.0.0", port=5000, storage_path="./chat_history/mychat.db")
+
+# For in-memory chat history (non-persistent), leave out `storage_path` parameter
 # smolagentsUI.serve(agent, host="0.0.0.0")
