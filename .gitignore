@@ -1,4 +1,5 @@
 .vscode
+docs/release_notes/
 chat_history/
 develop/
 test/
