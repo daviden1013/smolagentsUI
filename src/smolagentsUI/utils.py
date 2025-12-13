@@ -59,8 +59,7 @@ def serialize_step(step: Any) -> Any:
     # Pandas DataFrame -> Markdown Table
     elif pd and isinstance(step, pd.DataFrame):
         try:
-            # excessive columns can break UI, so we might want to truncate or just let it be
-            return step.to_markdown(index=False)
+            return step.to_markdown(index=True)
         except Exception:
             return str(step)
     elif hasattr(step, "__dict__"):
