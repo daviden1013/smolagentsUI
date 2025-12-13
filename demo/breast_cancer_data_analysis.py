@@ -21,22 +21,23 @@ model = OpenAIModel(model_id="openai/gpt-oss-120b",
                     api_key="", 
                     api_base="http://localhost:8000/v1")
 
+
+instructions = """
+Specific Instructions:
+
+1. Do not save any files to disk. All outputs should be returned via `final_answer` function which is the ONLY way users can see your outputs.
+2. Users might not see your intermediate reasoning steps, so make sure to explain your thoughts clearly in the `final_answer` function.
+3. It is highly encouraged to pass a Dict or List to the `final_answer` function with a friendly and helpful explanatory text and the requested output (e.g., Markdown text, Dict, PIL iamge, matplotlib image, pandas dataframe...), for example, 
+    - `final_answer(["<Your explanation and thoughts>", df.head(), img])`
+    - `final_answer({"Explanation": "<Your explanation and thoughts>", "dataframe": df.head()})`
+    - `final_answer({"Caption": "<a caption>", "Method": <a method summary>, "image": img})`
+"""
+
 agent = CodeAgent(tools=[], 
                   model=model, executor_type='local', 
                   additional_authorized_imports = ["pandas", "numpy", "tableone", "sklearn", "sklearn.*", "matplotlib", "matplotlib.*", "PIL", "PIL.*"],
+                  instructions=instructions,
                   stream_outputs=True)
-
-additional_system_instructions = """
-Additional Instructions:
-
-1. Always use final_answer function to display your outputs (e.g., PIL iamge, matplotlib image, pandas dataframe, Markdown text...) to the user.
-2. Input complex objects (e.g., Dict of dataframes) directly into final_answer function will cause error. Instead, convert them into a single pandas DataFrame or a single image before passing to final_answer.
-3. Do not save any files to disk. All outputs should be returned via final_answer function.
-4. (for gpt-oss) Never use "commentary" channel to output. Use "final" channel.
-"""
-
-# Append the additional instructions to system prompt
-agent.prompt_templates["system_prompt"] = agent.prompt_templates["system_prompt"] + additional_system_instructions
 
 import smolagentsUI
 smolagentsUI.serve(agent, host="0.0.0.0", port=5000, storage_path="./chat_history/mychat.db")
