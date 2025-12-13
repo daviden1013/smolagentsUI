@@ -202,22 +202,109 @@ body {
 .message.agent .content { padding: 20px; height: auto; }
 .message.system { text-align: center; color: var(--text-secondary); }
 
-/* Collapsible Steps */
-details.step {
-    background-color: #2a2b32;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    margin-bottom: 10px;
+/* --- Developer View / Process Panel --- */
+
+.agent-process-group {
+    margin-bottom: 20px;
+    border: 1px solid #333;
+    border-radius: 6px;
+    background-color: rgba(255, 255, 255, 0.02);
     overflow: hidden;
 }
 
+.process-status-panel {
+    padding: 12px 15px;
+    background-color: #25262b;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    position: relative;
+    user-select: none;
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    transition: background-color 0.2s;
+}
+
+.process-status-panel:hover {
+    background-color: #2a2b32;
+    color: var(--text-primary);
+}
+
+/* Loading Bar Animation */
+.process-status-panel .loading-bar {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background-color: var(--accent);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.agent-process-group.running .loading-bar {
+    opacity: 1;
+    animation: pulse-bar 1.5s infinite ease-in-out;
+}
+
+@keyframes pulse-bar {
+    0% { opacity: 0.5; box-shadow: 0 0 2px var(--accent); }
+    50% { opacity: 1; box-shadow: 0 0 8px var(--accent); }
+    100% { opacity: 0.5; box-shadow: 0 0 2px var(--accent); }
+}
+
+.status-text {
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-right: 10px;
+}
+
+.toggle-icon {
+    font-size: 0.8rem;
+    transition: transform 0.3s ease;
+    opacity: 0.7;
+}
+
+.agent-process-group.expanded .toggle-icon {
+    transform: rotate(180deg);
+}
+
+.process-steps-container {
+    display: none;
+    border-top: 1px solid var(--border);
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 10px;
+}
+
+.agent-process-group.expanded .process-steps-container {
+    display: block;
+}
+
+
+/* Collapsible Steps (Modified to fit in container) */
+details.step {
+    background-color: #2a2b32;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+details.step:last-child {
+    margin-bottom: 0;
+}
+
 summary {
-    padding: 10px 15px;
+    padding: 8px 12px;
     cursor: pointer;
     font-weight: bold;
     display: flex;
     align-items: center;
     list-style: none;
+    font-size: 0.9em;
 }
 
 summary::-webkit-details-marker { display: none; }
@@ -225,7 +312,7 @@ summary::after { content: '▼'; font-size: 0.8em; margin-left: auto; }
 details[open] summary::after { content: '▲'; }
 
 .step-content {
-    padding: 15px;
+    padding: 12px;
     border-top: 1px solid var(--border);
     background-color: #00000020;
     font-family: monospace;
@@ -295,7 +382,7 @@ textarea {
     border-radius: 8px;
     border-left: 4px solid var(--accent);
     overflow-x: auto;
-    margin-top: 10px;
+    margin-top: 15px;
 }
 
 img.agent-image { max-width: 100%; border-radius: 8px; margin-top: 10px; }
@@ -305,16 +392,8 @@ img.agent-image { max-width: 100%; border-radius: 8px; margin-top: 10px; }
     color: #a0a0a0;
     white-space: pre-wrap;
     padding: 10px;
-    border-left: 2px solid var(--accent);
-    background: #25262b;
-    border-radius: 4px;
-    animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-    0% { opacity: 0.7; }
-    50% { opacity: 1; }
-    100% { opacity: 0.7; }
+    font-size: 0.9em;
+    /* removed border/background since it's now inside the details view */
 }
 
 .code-block {
