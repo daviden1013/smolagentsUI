@@ -58,7 +58,7 @@ df = pd.read_csv('./demo/data/breast-cancer.data.csv')
 data_loader_tool = DataLoaderTool(df=df)
 ```
 
-Next, we create a Code Agent with the data loader tool. We use a locally served *gpt-oss-120b* as the LLM backend. For data analysis tasks, we authorize additional Python libraries such as `pandas`, `numpy`, `sklearn`, `tableone`, `matplotlib`, and `PIL` for the agent to use.
+Next, we prepare a model instance using a locally served *gpt-oss-120b* as the LLM backend.
 
 ```python
 from smolagents import CodeAgent, OpenAIModel
@@ -66,27 +66,28 @@ from smolagents import CodeAgent, OpenAIModel
 model = OpenAIModel(model_id="openai/gpt-oss-120b",
                     api_key="", 
                     api_base="http://localhost:8000/v1")
+```
+
+We create a Code Agent with the data loader tool. For data analysis tasks, we authorize additional Python libraries such as `pandas`, `numpy`, `sklearn`, `tableone`, `matplotlib`, and `PIL` for the agent to use. We add some additional instructions to the agent's system prompt to ensure that all outputs are returned via the `final_answer` function. Adjust this per your specific use case.
+
+```python
+instructions = """
+Specific Instructions:
+
+1. Do not save any files to disk. All outputs should be returned via `final_answer` function which is the ONLY way users can see your outputs.
+2. Users might not see your intermediate reasoning steps, so make sure to explain your thoughts clearly in the `final_answer` function.
+3. If your output is an object, 
+    - it is highly encouraged to pass a List to the `final_answer` function with a friendly and helpful explanatory text and the requested output (e.g., Markdown text, Dict, PIL iamge, matplotlib image, pandas dataframe...), for example, `final_answer(["<Your explanation and thoughts in Markdown>", df.head(), img])`
+    - always check your output object by printing its type and content summary before passing to `final_answer` function to avoid errors. For example, you can use `print(type(your_object))` and `print(your_object)` to check the type and content of your output object.
+4. Communication is key. If you need clarification or more information from the user, ask clarifying questions via the `final_answer` function before taking actions.
+5. If the task requires writing long code. Do not try to write the whole code at once. Instead, break down the code into smaller snippets, functions, or classes and implement them one by one, testing each part before moving on to the next. This is to avoid overwhelming the execution environment and causing memory issues.
+"""
 
 agent = CodeAgent(tools=[data_loader_tool], 
                   model=model, executor_type='local', 
-                  additional_authorized_imports = ["pandas", "numpy", "tableone", "sklearn", "sklearn.*", "matplotlib", "matplotlib.*", "PIL", "PIL.*"],
+                  additional_authorized_imports = ["pandas", "numpy.*", "tableone", "scipy", "scipy.*", "sklearn", "sklearn.*", "statsmodels", "statsmodels.*", "matplotlib", "matplotlib.*", "PIL", "PIL.*"],
+                  instructions=instructions,
                   stream_outputs=True)
-```
-
-We add some additional instructions to the agent's system prompt to ensure that all outputs are returned via the `final_answer` function. Adjust this per your specific use case.
-
-```python
-additional_system_instructions = """
-Additional Instructions:
-
-1. Always use final_answer function to display your outputs (e.g., PIL iamge, matplotlib image, pandas dataframe, Markdown text...) to the user.
-2. Input complex objects (e.g., Dict of dataframes) directly into final_answer function will cause error. Instead, convert them into a single pandas DataFrame or a single image before passing to final_answer.
-3. Do not save any files to disk. All outputs should be returned via final_answer function.
-4. (for gpt-oss) Never use "commentary" channel to output. Use "final" channel.
-"""
-
-# Append the additional instructions to system prompt
-agent.prompt_templates["system_prompt"] = agent.prompt_templates["system_prompt"] + additional_system_instructions
 ```
 
 Now, we start the web UI server with a persistent chat history storage (SQLite database file). If this is the first time, a SQLite database file will be created in the specified path. If the `storage_path` parameter is omitted, the chat history will be stored in memory only (non-persistent).
