@@ -16,7 +16,7 @@ let agentSpecs = null;
 let isUserAtBottom = true; // Default to true so it scrolls initially
 
 chatContainer.addEventListener('scroll', () => {
-    const threshold = 50; // pixels from bottom to be considered "at bottom"
+    const threshold = 30; // pixels from bottom to be considered "at bottom"
     isUserAtBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight <= threshold;
 });
 
@@ -362,6 +362,13 @@ sendBtn.addEventListener('click', () => {
     // STOP ACTION
     if (isGenerating) {
         socket.emit('stop_run', { session_id: currentSessionId });
+
+        if (currentStepContainer) {
+            currentStepContainer.classList.remove('step-thinking');
+            currentStepContainer.innerHTML = currentStreamText + '\n\n[Stopping...]'; 
+        }
+        
+        toggleSendButtonState(false); 
         return;
     }
 
@@ -636,11 +643,12 @@ socket.on('final_answer', (data) => {
 socket.on('run_complete', (data) => { 
     if (data && data.session_id === currentSessionId) {
         toggleSendButtonState(false); 
-        const container = ensureAgentContainer();
-        const group = container.querySelector('.agent-process-group:last-of-type');
-        if (group) {
-            group.classList.remove('running');
+        
+        if (currentStepContainer) {
+            currentStepContainer.remove(); 
         }
+        currentStepContainer = null;
+        currentStreamText = "";
     }
 });
 
