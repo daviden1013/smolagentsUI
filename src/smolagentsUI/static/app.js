@@ -390,6 +390,7 @@ sendBtn.addEventListener('click', () => {
         message: text,
         session_id: currentSessionId 
     });
+    getOrCreateStepContainer();
 });
 
 userInput.addEventListener('keydown', (e) => {
@@ -643,6 +644,25 @@ socket.on('final_answer', (data) => {
 socket.on('run_complete', (data) => { 
     if (data && data.session_id === currentSessionId) {
         toggleSendButtonState(false); 
+
+        let lastMsg = chatContainer.lastElementChild;
+        if (lastMsg && lastMsg.classList.contains('agent')) {
+            const container = lastMsg.querySelector('.content');
+            if (container) {
+                // Find and stop the running animation on the process group
+                const group = container.querySelector('.agent-process-group:last-of-type');
+                if (group) {
+                    group.classList.remove('running');
+                    const statusText = group.querySelector('.status-text');
+                    
+                    // Update status text, unless final_answer already set it to "Task Completed"
+                    if(statusText && statusText.textContent !== "Task Completed") {
+                        statusText.textContent = "Run Ended"; 
+                    }
+                }
+            }
+        }
+        // ------------------------------------------------------------
         
         if (currentStepContainer) {
             currentStepContainer.remove(); 
