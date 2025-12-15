@@ -69,6 +69,7 @@ class AgentWrapper:
                     timing=timing,
                     model_input_messages=model_input_messages,
                     tool_calls=tool_calls,
+                    error=step_data.get("error"),
                     model_output_message=model_output_message,
                     model_output=step_data.get("model_output"),
                     observations=step_data.get("observations"),
