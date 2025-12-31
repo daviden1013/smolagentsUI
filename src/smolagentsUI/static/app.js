@@ -174,6 +174,9 @@ function renderWelcomeScreen() {
 
 function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     let stepsContainer;
+
+    console.log("typeof modelOutput:", typeof modelOutput);
+    console.log("ModelOutput:", modelOutput);
     
     // If we were streaming, the placeholder is inside the correct container
     if (currentStepContainer) {
@@ -194,12 +197,20 @@ function renderStep(stepNumber, modelOutput, code, logs, images, error) {
 
     if (modelOutput) {
         if (typeof modelOutput === 'object') {
-            // Handle JSON structure: { thought: "...", code: "..." }
+            // Handle JSON structure
             thoughtText = modelOutput.thought || "";
             if (modelOutput.code) {
                 modelGeneratedCode = modelOutput.code;
             }
-        } else {
+        } else
+        try {
+            // Attempt to parse as JSON
+            modelOutput = JSON.parse(modelOutput);
+            thoughtText = modelOutput.thought || "";
+            if (modelOutput.code) {
+                modelGeneratedCode = modelOutput.code;
+            }
+        } catch (e) {
             // Handle standard String output
             thoughtText = String(modelOutput);
         }
