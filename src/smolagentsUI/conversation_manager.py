@@ -6,6 +6,7 @@ import datetime
 import threading
 import sqlite3
 from typing import List, Dict, Optional
+from .utils import serialize_python_state, deserialize_python_state
 
 class ConversationManager:
     def __init__(self, storage_path: str = None):
@@ -88,7 +89,8 @@ class ConversationManager:
                         "id": row["session_id"],
                         "timestamp": row["timestamp"],
                         "preview": row["preview"],
-                        "steps": None  
+                        "steps": None,
+                        "python_state": None
                     })
         except Exception as e:
             print(f"Warning: Could not load initial metadata from DB: {e}")
@@ -107,35 +109,52 @@ class ConversationManager:
 
     def get_session(self, session_id: str) -> Optional[Dict]:
         """
-        Returns the full data for a specific session.
+        Returns the full data for a specific session, including python_state.
         """
         with self.lock:
             # check in cache first
             session = next((s for s in self.sessions_cache if s["id"] == session_id), None)
             
-            if session is not None and session.get("steps") is None:
-                # load from DB
-                if self.storage_path:
-                    try:
-                        with self._get_db_conn() as conn:
-                            cursor = conn.execute(
-                                "SELECT step_data FROM steps WHERE session_id = ? ORDER BY step_index ASC", 
-                                (session_id,)
-                            )
-                            step_rows = cursor.fetchall()
-                            session["steps"] = [json.loads(row["step_data"]) for row in step_rows]
-                    except Exception as e:
-                        warnings.warn(f"Could not load session steps from DB for session {session_id}: {e}", RuntimeWarning)
+            if session is not None:
+                # Load Steps if missing
+                if session.get("steps") is None:
+                    if self.storage_path:
+                        try:
+                            with self._get_db_conn() as conn:
+                                cursor = conn.execute(
+                                    "SELECT step_data FROM steps WHERE session_id = ? ORDER BY step_index ASC", 
+                                    (session_id,)
+                                )
+                                step_rows = cursor.fetchall()
+                                session["steps"] = [json.loads(row["step_data"]) for row in step_rows]
+                        except Exception as e:
+                            warnings.warn(f"Could not load session steps: {e}", RuntimeWarning)
+                            session["steps"] = []
+                    else:
                         session["steps"] = []
-                else:
-                    session["steps"] = []
+
+                # Load Python State if missing
+                if session.get("python_state") is None:
+                    session["python_state"] = {}
+                    if self.storage_path:
+                        try:
+                            with self._get_db_conn() as conn:
+                                cursor = conn.execute(
+                                    "SELECT state_data FROM python_state WHERE session_id = ?", 
+                                    (session_id,)
+                                )
+                                row = cursor.fetchone()
+                                if row and row["state_data"]:
+                                    session["python_state"] = deserialize_python_state(row["state_data"])
+                        except Exception as e:
+                            print(f"Warning: Could not load python state: {e}")
 
             return session
 
-
-    def save_session(self, session_id: Optional[str], serialized_steps: List[Dict], task_preview: str = "New Chat") -> str:
+    def save_session(self, session_id: Optional[str], serialized_steps: List[Dict], task_preview: str = "New Chat", python_state: Dict = None) -> str:
         """
         Saves or updates a session in both cache and database.
+        Accepts optional python_state dict.
         """
         with self.lock:
             if not session_id:
@@ -143,26 +162,27 @@ class ConversationManager:
 
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            # update in-memory cache
             session_data = {
                 "id": session_id,
                 "timestamp": timestamp,
                 "preview": task_preview,
-                "steps": serialized_steps
+                "steps": serialized_steps,
+                "python_state": python_state
             }
 
+            # Update cache list logic
             existing_idx = next((i for i, s in enumerate(self.sessions_cache) if s["id"] == session_id), None)
             if existing_idx is not None:
-                self.sessions_cache[existing_idx] = session_data
+                self.sessions_cache[existing_idx].update(session_data)
                 self.sessions_cache.insert(0, self.sessions_cache.pop(existing_idx))
             else:
                 self.sessions_cache.insert(0, session_data)
 
-            # update SQLite (if active)
+            # Update SQLite
             if self.storage_path:
                 try:
                     with self._get_db_conn() as conn:
-                        # upsert metadata
+                        # Upsert Metadata
                         conn.execute("""
                             INSERT INTO sessions (session_id, preview, timestamp, last_updated)
                             VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -171,7 +191,7 @@ class ConversationManager:
                                 last_updated=CURRENT_TIMESTAMP
                         """, (session_id, task_preview, timestamp))
 
-                        # append steps
+                        # Upsert Steps
                         cursor = conn.execute(
                             "SELECT MAX(step_index) as max_idx FROM steps WHERE session_id = ?", 
                             (session_id,)
@@ -189,11 +209,23 @@ class ConversationManager:
                                 "INSERT INTO steps (session_id, step_index, step_data) VALUES (?, ?, ?)",
                                 steps_to_insert
                             )
+                        
+                        # Upsert Python State
+                        if python_state:
+                            state_blob = serialize_python_state(python_state)
+                            if state_blob:
+                                conn.execute("""
+                                    INSERT INTO python_state (session_id, state_data, last_updated)
+                                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                                    ON CONFLICT(session_id) DO UPDATE SET
+                                        state_data=excluded.state_data,
+                                        last_updated=CURRENT_TIMESTAMP
+                                """, (session_id, state_blob))
+
                 except Exception as e:
                     raise IOError(f"Could not save session: {e}")
 
             return session_id
-
     def rename_session(self, session_id: str, new_name: str) -> bool:
         """ Renames a session in cache and DB. """
         with self.lock:

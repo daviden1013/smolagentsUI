@@ -118,6 +118,22 @@ class AgentWrapper:
     def clear_memory(self):
         self.agent.memory.reset()
 
+    def get_executor_state(self) -> Dict[str, Any]:
+        """
+        Retrieves the current variable state from the agent's Python executor.
+        """
+        if hasattr(self.agent.python_executor, "state"):
+             return self.agent.python_executor.state
+        return {}
+
+    def set_executor_state(self, state: Dict[str, Any]):
+        """
+        Injects a dictionary of variables back into the agent's Python executor.
+        """
+        if state and hasattr(self.agent.python_executor, "send_variables"):
+            print(f"🔄 Restoring {len(state)} variables to Python executor.")
+            self.agent.python_executor.send_variables(state)
+
     def run(self, task: str) -> Generator[Dict, None, Optional[ActionStep]]:
         """
         Runs the agent and yields UI-friendly event dictionaries.

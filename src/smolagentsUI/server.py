@@ -39,6 +39,8 @@ def get_agent_wrapper(session_id):
     session_data = conversation_manager.get_session(session_id)
     if session_data:
         wrapper.load_memory(session_data.get("steps", []))
+        if session_data.get("python_state") is not None:
+            wrapper.set_executor_state(session_data["python_state"])
         
     active_agents[session_id] = wrapper
     return wrapper
@@ -132,11 +134,13 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
         if not session:
             emit('error', {'message': "Session not found"})
             return
+        
+        session_display = {k: v for k, v in session.items() if k != 'python_state'}
             
         print(f"📂 Loading session UI: {target_id}")
         get_agent_wrapper(target_id) 
         
-        emit('reload_chat', session)
+        emit('reload_chat', session_display)
 
     @socketio.on('rename_session')
     def handle_rename_session(data):
@@ -212,6 +216,7 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
             
             # --- Saving Logic ---
             steps_data = wrapper.get_steps_data()
+            current_state = wrapper.get_executor_state()
             
             # Determine preview
             preview = "New Chat"
@@ -224,7 +229,8 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
             final_id = conversation_manager.save_session(
                 session_id, 
                 steps_data, 
-                task_preview=preview
+                task_preview=preview,
+                python_state=current_state
             )
             
             # Refresh history list

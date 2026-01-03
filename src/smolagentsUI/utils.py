@@ -1,7 +1,8 @@
-from typing import Any, Tuple
+from typing import Any, Tuple, Dict
 import json
 import io
 import base64
+import dill
 
 try:
     from PIL import Image
@@ -70,3 +71,28 @@ def serialize_step(step: Any) -> Any:
     else:
         # For any other type, convert to string
         return str(step)
+    
+def serialize_python_state(state: Dict[str, Any]) -> bytes:
+    """
+    Serializes the Python state dictionary using dill.
+    Returns bytes suitable for BLOB storage.
+    """
+    if not state:
+        return b""
+    try:
+        return dill.dumps(state)
+    except Exception as e:
+        print(f"Warning: Could not serialize python state: {e}")
+        return b""
+
+def deserialize_python_state(data: bytes) -> Dict[str, Any]:
+    """
+    Deserializes the Python state from bytes.
+    """
+    if not data:
+        return {}
+    try:
+        return dill.loads(data)
+    except Exception as e:
+        print(f"Warning: Could not restore python state: {e}")
+        return {}
