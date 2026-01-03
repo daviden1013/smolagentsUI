@@ -11,6 +11,7 @@ let currentStepContainer = null;
 let currentStreamText = "";
 let currentSessionId = null; 
 let agentSpecs = null; 
+let streamRenderTimeout = null;
 
 // --- Smart Scroll Logic ---
 let isUserAtBottom = true; // Default to true so it scrolls initially
@@ -647,13 +648,12 @@ function parseStream(text) {
     return { mode: 'text', thought: text, code: null };
 }
 
-socket.on('stream_delta', (data) => {
-    if (!isForCurrentSession(data)) return;
-
+/**
+ * Renders the current buffered stream text to the UI.
+ */
+function renderCurrentStream() {
     // This creates/finds the 'thinking' element AND makes sure the developer view wrapper exists
     const div = getOrCreateStepContainer();
-    
-    currentStreamText += data.content;
     
     const parsed = parseStream(currentStreamText);
     
@@ -698,6 +698,17 @@ socket.on('stream_delta', (data) => {
     }
 
     scrollToBottom();
+    streamRenderTimeout = null; // Clear the timeout flag
+}
+
+socket.on('stream_delta', (data) => {
+    if (!isForCurrentSession(data)) return;
+    
+    currentStreamText += data.content;
+
+    if (!streamRenderTimeout) {
+        streamRenderTimeout = setTimeout(renderCurrentStream, 50); // 50ms = 20fps
+    }
 });
 
 socket.on('tool_start', (data) => {
