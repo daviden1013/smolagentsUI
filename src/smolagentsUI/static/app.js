@@ -174,9 +174,6 @@ function renderWelcomeScreen() {
 
 function renderStep(stepNumber, modelOutput, code, logs, images, error) {
     let stepsContainer;
-
-    console.log("typeof modelOutput:", typeof modelOutput);
-    console.log("ModelOutput:", modelOutput);
     
     // If we were streaming, the placeholder is inside the correct container
     if (currentStepContainer) {
@@ -609,6 +606,47 @@ function isForCurrentSession(data) {
     return data.session_id === currentSessionId;
 }
 
+/* Helper to unescape JSON string content manually */
+function unescapeJson(str) {
+    return str.replace(/\\n/g, '\n')
+              .replace(/\\"/g, '"')
+              .replace(/\\\\/g, '\\')
+              .replace(/\\t/g, '\t');
+}
+
+/* Helper to parse partial stream */
+function parseStream(text) {
+    // 1. JSON Mode (use_structured_outputs_internally=True)
+    if (text.trim().startsWith('{')) {
+        const thoughtMatch = text.match(/"thought"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/);
+        const codeMatch = text.match(/"code"\s*:\s*"((?:\\.|[^"\\])*)(?:"|$)/);
+        
+        return {
+            mode: 'json',
+            thought: thoughtMatch ? unescapeJson(thoughtMatch[1]) : "",
+            code: codeMatch ? unescapeJson(codeMatch[1]) : ""
+        };
+    }
+    
+    // 2. Text/Tag Mode (Standard smolagents)
+    // Pattern: text... <code>code...
+    const codeStart = text.indexOf('<code>');
+    if (codeStart !== -1) {
+        let thought = text.substring(0, codeStart);
+        let code = text.substring(codeStart + 6); // 6 is len of <code>
+        
+        // Remove closing tag if present
+        const codeEnd = code.lastIndexOf('</code>');
+        if (codeEnd !== -1) {
+            code = code.substring(0, codeEnd);
+        }
+        return { mode: 'text', thought: thought, code: code };
+    }
+
+    // 3. Plain Text
+    return { mode: 'text', thought: text, code: null };
+}
+
 socket.on('stream_delta', (data) => {
     if (!isForCurrentSession(data)) return;
 
@@ -616,19 +654,44 @@ socket.on('stream_delta', (data) => {
     const div = getOrCreateStepContainer();
     
     currentStreamText += data.content;
-    div.textContent = currentStreamText; 
+    
+    const parsed = parseStream(currentStreamText);
+    
+    let html = "";
+    if (parsed.thought) {
+        // Render thought (Markdown supported)
+        html += `<div class="model-thought" style="margin-bottom: 10px;">${marked.parse(parsed.thought)}</div>`;
+    }
+    if (parsed.code) {
+        // Render code block
+        html += `<div class="code-block"><pre><code class="language-python">${parsed.code}</code></pre></div>`;
+    }
+    
+    if (html) {
+        div.innerHTML = html;
+        // Highlight code blocks
+        div.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    } else {
+        // Fallback if empty
+        div.textContent = currentStreamText;
+    }
     
     // Update the Status Panel Text with the first line of thought
     const group = div.closest('.agent-process-group');
     if (group) {
         const statusText = group.querySelector('.status-text');
         if (statusText) {
+            // Use parsed thought for cleaner status (avoids JSON syntax)
+            const sourceText = parsed.thought || currentStreamText;
+            
             // Find first non-empty line
-            const match = currentStreamText.match(/\S.*$/m); // Finds first line with content
+            const match = sourceText.match(/\S.*$/m); 
             if (match) {
                  const line = match[0];
                  statusText.textContent = line.length > 80 ? line.substring(0, 80) + "..." : line;
-            } else if (currentStreamText.length > 0) {
+            } else if (sourceText.length > 0) {
                  statusText.textContent = "Thinking..."; 
             }
         }
