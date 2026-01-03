@@ -1,5 +1,6 @@
 import io
 import base64
+import json
 from typing import Generator, List, Dict, Any, Optional
 from .utils import serialize_step
 
@@ -64,6 +65,10 @@ class AgentWrapper:
                 
                 model_output_message = ChatMessage.from_dict(step_data["model_output_message"]) if step_data.get("model_output_message") else None
 
+                model_output = step_data.get("model_output")
+                if isinstance(model_output, (dict, list)):
+                    model_output = json.dumps(model_output)
+
                 step = ActionStep(
                     step_number=step_data["step_number"],
                     timing=timing,
@@ -71,7 +76,7 @@ class AgentWrapper:
                     tool_calls=tool_calls,
                     error=step_data.get("error"),
                     model_output_message=model_output_message,
-                    model_output=step_data.get("model_output"),
+                    model_output=model_output,
                     observations=step_data.get("observations"),
                     action_output=step_data.get("action_output"),
                     token_usage=token_usage,
