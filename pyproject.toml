@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "smolagentsUI"
-version = "0.1.2"
+version = "0.1.3"
 description = "A lightweight UI for smolagents"
 authors = ["Enshuo (David) Hsu"]
 license = "MIT"
