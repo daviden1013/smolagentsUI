@@ -321,7 +321,23 @@ details[open] summary::after { content: '▲'; }
 }
 
 /* Input Area */
-.input-area { padding: 20px; background: var(--bg-dark); }
+.input-area { 
+    padding: 20px; 
+    background: var(--bg-dark);
+    position: relative;
+    z-index: 10;
+}
+
+.input-area::before {
+    content: "";
+    position: absolute;
+    top: -60px; 
+    left: 0;
+    right: 0;
+    height: 60px;
+    background: linear-gradient(to bottom, transparent, var(--bg-dark));
+    pointer-events: none; 
+}
 
 .input-wrapper {
     max-width: 800px;
@@ -333,6 +349,36 @@ details[open] summary::after { content: '▲'; }
     display: flex;
     padding: 10px 15px;
     align-items: flex-end; /* Align bottom for multiline */
+}
+
+/* Expand Button Styles */
+#expand-btn {
+    position: absolute;
+    top: 8px;
+    right: 70px; /* Positioned to the left of the send button area */
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.6;
+    transition: opacity 0.2s, color 0.2s;
+    width: 24px;
+    height: 24px;
+}
+
+#expand-btn:hover {
+    opacity: 1;
+    color: var(--text-primary);
+}
+
+/* Expanded State */
+.input-wrapper.expanded textarea {
+    height: 800px; 
+    max-height: 60vh;
 }
 
 textarea {

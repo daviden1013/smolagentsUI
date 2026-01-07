@@ -861,3 +861,25 @@ modalConfirmBtn.onclick = () => {
 modalInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') modalConfirmBtn.click();
 });
+
+// --- Expand/Collapse Input Logic ---
+
+const expandBtn = document.getElementById('expand-btn');
+const inputWrapper = document.querySelector('.input-wrapper');
+
+if (expandBtn && inputWrapper) {
+    expandBtn.addEventListener('click', () => {
+        inputWrapper.classList.toggle('expanded');
+        const isExpanded = inputWrapper.classList.contains('expanded');
+        
+        if (isExpanded) {
+            // Switch to "Minimize" icon
+            expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>`;
+            expandBtn.title = "Collapse input";
+        } else {
+            // Switch back to "Expand" icon
+            expandBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>`;
+            expandBtn.title = "Expand input";
+        }
+    });
+}
