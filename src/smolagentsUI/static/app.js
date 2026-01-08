@@ -399,8 +399,6 @@ function renderFinalAnswer(container, content) {
     scrollToBottom();
 }
 
-// --- NEW: Variable Viewer Logic ---
-
 function renderVariables(variables) {
     if (!variables || variables.length === 0) {
         variableList.innerHTML = '<div class="empty-state">No variables active</div>';
@@ -412,8 +410,8 @@ function renderVariables(variables) {
     variables.forEach(v => {
         const card = document.createElement('div');
         card.className = 'var-card';
+        card.dataset.name = v.name; // Store name for reference
         
-        // Shape badge if available
         const shapeBadge = v.shape ? `<span style="background:#333; padding:1px 4px; border-radius:3px; margin-left:6px;">${v.shape}</span>` : '';
 
         card.innerHTML = `
@@ -424,13 +422,121 @@ function renderVariables(variables) {
             <div class="var-preview" title="${v.preview.replace(/"/g, '&quot;')}">${v.preview}</div>
         `;
         
-        card.onclick = () => {
-             console.log(`Inspect variable: ${v.name}`);
-             // Placeholder for Inspection Logic
+        // --- UPDATED CLICK LOGIC ---
+        card.onclick = (e) => {
+            // If user clicks inside the expanded content (e.g. to copy text), don't collapse
+            if (e.target.closest('.var-expanded-content')) return;
+
+            // Toggle Collapse if already expanded
+            if (card.classList.contains('expanded')) {
+                card.classList.remove('expanded');
+                const existingContent = card.querySelector('.var-expanded-content');
+                if (existingContent) existingContent.remove();
+                return;
+            }
+
+            // Visual feedback that we are fetching
+            card.style.opacity = '0.6';
+            card.style.cursor = 'wait';
+            
+            socket.emit('inspect_variable', { 
+                session_id: currentSessionId, 
+                name: v.name 
+            });
         };
         
         variableList.appendChild(card);
     });
+}
+
+socket.on('variable_details', (data) => {
+    // Reset card style
+    const card = document.querySelector(`.var-card[data-name="${data.name}"]`);
+    if (card) {
+        card.style.opacity = '1';
+        card.style.cursor = 'pointer';
+    }
+
+    if (data.error) {
+        alert(data.error);
+        return;
+    }
+
+    // Logic: DataFrame/Image -> Modal, Others -> Expand Card
+    if (data.type === 'dataframe' || data.type === 'image') {
+        openInspectionModal(data);
+    } else {
+        if (card) expandVariableCard(card, data.content);
+    }
+});
+
+function expandVariableCard(card, content) {
+    card.classList.add('expanded');
+    
+    const container = document.createElement('div');
+    container.className = 'var-expanded-content';
+    
+    // Use Pre tag for code/text formatting
+    const pre = document.createElement('pre');
+    pre.textContent = content;
+    
+    container.appendChild(pre);
+    card.appendChild(container);
+}
+
+function openInspectionModal(data) {
+    // Reuse existing modal structure or create a custom viewer overlay
+    // We will create a specific "Inspector Overlay" dynamically to keep it clean
+    
+    let overlay = document.getElementById('inspector-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'inspector-overlay';
+        overlay.className = 'modal-overlay visible'; // Reuse visible class from style.css
+        document.body.appendChild(overlay);
+        
+        // Close on background click
+        overlay.onclick = (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        };
+    }
+
+    // Content Container
+    const contentBox = document.createElement('div');
+    contentBox.className = 'inspector-box';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'inspector-header';
+    header.innerHTML = `
+        <span class="title">${data.name} <span class="type-tag">(${data.type})</span></span>
+        <button class="close-btn" onclick="document.getElementById('inspector-overlay').remove()">×</button>
+    `;
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'inspector-body';
+
+    if (data.type === 'image') {
+        const img = document.createElement('img');
+        img.src = data.content;
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '100%';
+        img.style.objectFit = 'contain';
+        body.style.display = 'flex';
+        body.style.justifyContent = 'center';
+        body.style.alignItems = 'center';
+        body.appendChild(img);
+    } else if (data.type === 'dataframe') {
+        // Inject the HTML Table
+        body.innerHTML = data.content;
+    }
+
+    contentBox.appendChild(header);
+    contentBox.appendChild(body);
+    overlay.appendChild(contentBox);
 }
 
 function togglePanel(id) {

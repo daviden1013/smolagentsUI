@@ -119,6 +119,117 @@ body {
     border-color: #555;
 }
 
+.var-card.expanded {
+    background-color: #2a2b32;
+    border-color: #666;
+}
+
+.var-expanded-content {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed #444;
+    overflow-x: auto;
+}
+
+.var-expanded-content pre {
+    margin: 0;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85em;
+    color: #cecece;
+    white-space: pre-wrap; /* Wrap long lines */
+    word-break: break-all;
+}
+
+/* --- Inspector Modal (Middle Viewer) --- */
+.inspector-box {
+    background-color: #1e1e1e;
+    border: 1px solid #444;
+    border-radius: 8px;
+    width: 90vw;
+    height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    overflow: hidden;
+}
+
+.inspector-header {
+    padding: 10px 15px;
+    background-color: #25262b;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.inspector-header .title {
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.inspector-header .type-tag {
+    color: var(--accent);
+    font-size: 0.8em;
+    margin-left: 8px;
+    font-family: monospace;
+}
+
+.inspector-header .close-btn {
+    background: none;
+    border: none;
+    color: #888;
+    font-size: 1.5rem;
+    cursor: pointer;
+    line-height: 1;
+}
+.inspector-header .close-btn:hover { color: white; }
+
+.inspector-body {
+    flex-grow: 1;
+    overflow: auto; /* Handles the scrollbars for DF */
+    padding: 15px;
+    background-color: #1a1a1a;
+}
+
+/* --- DataFrame Table Styling --- */
+.df-table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.9em;
+    font-family: monospace;
+    color: #d0d0d0;
+}
+
+.df-table thead tr {
+    background-color: #2c2c2c;
+    position: sticky; /* Sticky Header */
+    top: 0;
+    z-index: 1;
+}
+
+.df-table th {
+    font-weight: bold;
+    color: var(--accent);
+    text-align: left;
+    border: 1px solid #444;
+    padding: 8px;
+    white-space: nowrap;
+}
+
+.df-table td {
+    border: 1px solid #333;
+    padding: 6px 8px;
+    white-space: nowrap; /* Prevent wrapping for dense data */
+}
+
+.df-table tr:nth-child(even) {
+    background-color: #222;
+}
+
+.df-table tr:hover {
+    background-color: #333;
+}
+
 .var-header {
     display: flex;
     justify-content: space-between;

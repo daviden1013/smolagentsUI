@@ -175,6 +175,19 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
         if conversation_manager.delete_session(session_id):
             emit('history_list', {'sessions': conversation_manager.get_session_summaries()})
 
+    @socketio.on('inspect_variable')
+    def handle_inspect_variable(data):
+        session_id = data.get('session_id')
+        var_name = data.get('name')
+        
+        if not session_id or not var_name:
+            return
+            
+        wrapper = get_agent_wrapper(session_id)
+        if wrapper:
+            details = wrapper.get_variable_details(var_name)
+            emit('variable_details', details)
+
     @socketio.on('stop_run')
     def handle_stop_run(data):
         session_id = data.get('session_id')

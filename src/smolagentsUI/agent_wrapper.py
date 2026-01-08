@@ -1,3 +1,6 @@
+import io
+import base64
+import pprint
 import inspect
 import json
 from typing import Generator, List, Dict, Any, Optional
@@ -187,6 +190,75 @@ class AgentWrapper:
             
         # Sort alphabetically
         return sorted(variables, key=lambda x: x['name'])
+    
+    def get_variable_details(self, name: str) -> Dict[str, Any]:
+        """
+        Retrieves the full details of a variable for inspection.
+        """
+        if not hasattr(self.agent.python_executor, "state"):
+            return {"error": "Executor state not available"}
+        
+        value = self.agent.python_executor.state.get(name)
+        if value is None:
+             return {"error": f"Variable '{name}' not found"}
+
+        type_name = type(value).__name__
+        
+        # 1. Pandas DataFrame -> HTML Table
+        if hasattr(value, "to_html") and type_name == "DataFrame":
+            try:
+                # We render a scrollable HTML table. 
+                # max_rows can be adjusted or removed to show all.
+                html = value.to_html(max_rows=1000, classes="df-table", border=0)
+                return {
+                    "name": name, 
+                    "type": "dataframe", 
+                    "content": html
+                }
+            except Exception as e:
+                return {"name": name, "type": "text", "content": f"Error converting DataFrame: {e}"}
+
+        # 2. Images (PIL or Matplotlib Figure) -> Base64
+        # Check for PIL Image
+        if hasattr(value, "save") and type_name.endswith("Image"):
+            try:
+                buffered = io.BytesIO()
+                value.save(buffered, format="PNG")
+                img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                return {
+                    "name": name, 
+                    "type": "image", 
+                    "content": f"data:image/png;base64,{img_str}"
+                }
+            except:
+                pass
+        
+        # Check for Matplotlib Figure
+        if hasattr(value, "savefig"):
+            try:
+                buffered = io.BytesIO()
+                value.savefig(buffered, format='png')
+                img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                return {
+                    "name": name, 
+                    "type": "image", 
+                    "content": f"data:image/png;base64,{img_str}"
+                }
+            except:
+                pass
+
+        # 3. Default -> String Representation
+        # Use pprint for cleaner formatting of lists/dicts
+        try:
+            formatted_text = pprint.pformat(value, indent=2)
+        except:
+            formatted_text = str(value)
+            
+        return {
+            "name": name, 
+            "type": "text", 
+            "content": formatted_text
+        }
 
     def run(self, task: str) -> Generator[Dict, None, Optional[ActionStep]]:
         """
