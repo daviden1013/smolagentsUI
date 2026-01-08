@@ -52,32 +52,49 @@ body {
     flex-direction: column;
     border-left: 1px solid #333;
     flex-shrink: 0;
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.right-sidebar.collapsed {
+    width: 30px;
+}
+
+/* Sidebar Toggle Button */
+#sidebar-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 5px;
+    width: 30px;       
+    height: 30px;
+    align-self: flex-end; 
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s;
+}
+
+#sidebar-toggle:hover {
+    color: var(--text-primary);
+    background-color: #2a2b32;
+}
+
+/* Hide content when collapsed */
+.right-sidebar.collapsed .panel-section {
+    display: none;
 }
 
 .panel-section {
     display: flex;
     flex-direction: column;
-    min-height: 150px; /* Default minimum height when OPEN */
-    border-bottom: 1px solid #333;
-    transition: all 0.2s ease; /* Smooth animation */
-}
-.panel-section.collapsed {
-    flex-grow: 0 !important;   /* Don't take extra space */
-    height: auto !important;   /* Shrink to content size (header only) */
-    min-height: 0 !important;  /* Remove minimum height constraint */
-}
-.panel-section.collapsed .panel-content {
-    display: none !important;  /* Completely hide content */
+    flex-grow: 1;
+    overflow: hidden;
 }
 
-/* Toggle Icon Rotation */
-.panel-section.collapsed .toggle-icon {
-    transform: rotate(-90deg);
-}
-
-/* Variable Panel takes available space, Output Panel takes remaining */
+/* Variable Panel takes available space */
 #var-panel { flex-grow: 1; overflow: hidden; }
-#output-panel { height: 40%; flex-shrink: 0; overflow: hidden; }
 
 .panel-header {
     padding: 10px 15px;
@@ -87,14 +104,11 @@ body {
     text-transform: uppercase;
     color: var(--text-secondary);
     border-bottom: 1px solid #333;
-    cursor: pointer;
     display: flex;
     justify-content: space-between;
     user-select: none;
-    flex-shrink: 0; /* Header never shrinks */
+    flex-shrink: 0; 
 }
-
-.panel-header:hover { color: var(--text-primary); }
 
 .panel-content {
     flex-grow: 1;

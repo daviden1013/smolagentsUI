@@ -539,32 +539,21 @@ function openInspectionModal(data) {
     overlay.appendChild(contentBox);
 }
 
-function togglePanel(id) {
-    const panel = document.getElementById(id);
-    if (!panel) return;
-    
-    panel.classList.toggle('collapsed');
-    
-    const varPanel = document.getElementById('var-panel');
-    const outPanel = document.getElementById('output-panel');
-    
-    if (!varPanel || !outPanel) return;
-
-    const isVarCollapsed = varPanel.classList.contains('collapsed');
-    const isOutCollapsed = outPanel.classList.contains('collapsed');
-
-    // 1. Reset inline styles so CSS classes can govern base behavior
-    outPanel.style.height = '';
-    outPanel.style.flexGrow = '';
-
-    // 2. Logic: If Variables panel is closed, allow Output panel to fill the sidebar
-    if (isVarCollapsed && !isOutCollapsed) {
-        outPanel.style.height = 'auto'; // Override fixed 40%
-        outPanel.style.flexGrow = '1';  // Take available space
+// New Sidebar Toggle Logic
+function toggleRightSidebar() {
+    const sidebar = document.getElementById('right-sidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('collapsed');
     }
 }
-// Expose globally for HTML onclick attributes
-window.togglePanel = togglePanel;
+// Expose globally
+window.toggleRightSidebar = toggleRightSidebar;
+
+// NEW: Event Listener for sidebar toggle
+const sidebarToggleBtn = document.getElementById('sidebar-toggle');
+if (sidebarToggleBtn) {
+    sidebarToggleBtn.addEventListener('click', toggleRightSidebar);
+}
 
 
 // --- User Actions ---
