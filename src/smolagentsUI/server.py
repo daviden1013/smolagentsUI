@@ -31,6 +31,10 @@ def get_agent_wrapper(session_id):
     new_agent = copy.copy(prototype_agent)
     new_agent.memory = copy.deepcopy(prototype_agent.memory)
     new_agent.memory.reset()
+    if hasattr(prototype_agent, 'python_executor'):
+        new_agent.python_executor = copy.deepcopy(prototype_agent.python_executor)
+    
+    new_agent.python_executor.state.clear()
     
     # Wrap new agent
     wrapper = AgentWrapper(new_agent)
