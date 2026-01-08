@@ -1,5 +1,4 @@
-import io
-import base64
+import inspect
 import json
 from typing import Generator, List, Dict, Any, Optional
 from .utils import serialize_step
@@ -133,6 +132,61 @@ class AgentWrapper:
         if state and hasattr(self.agent.python_executor, "send_variables"):
             print(f"🔄 Restoring {len(state)} variables to Python executor.")
             self.agent.python_executor.send_variables(state)
+
+    def get_active_variables(self) -> List[Dict[str, Any]]:
+        """
+        Returns a filtered list of variables from the executor state
+        suitable for the Variable Viewer UI.
+        """
+        if not hasattr(self.agent.python_executor, "state"):
+            return []
+
+        variables = []
+        state = self.agent.python_executor.state
+        
+        for name, value in state.items():
+            # 1. Filter System Variables and Private attributes
+            if name.startswith('_'):
+                continue
+            
+            # 2. Filter Constants (All Uppercase)
+            if name.isupper():
+                continue
+
+            # 3. Filter Modules, Functions, and Classes (we only want data)
+            if inspect.ismodule(value) or inspect.isclass(value) or inspect.isfunction(value) or inspect.isbuiltin(value):
+                continue
+            
+            # 4. Filter Specific Framework objects (optional, e.g. the agent itself if injected)
+            type_name = type(value).__name__
+            if type_name in ['CodeAgent', 'Tool']:
+                continue
+
+            # 5. Extract Metadata
+            preview = str(value)
+            if len(preview) > 100:
+                preview = preview[:100] + "..."
+            
+            shape = ""
+            # Handle pandas DataFrame/Series shape
+            if hasattr(value, "shape") and isinstance(value.shape, tuple):
+                shape = str(value.shape)
+            # Handle list/dict length
+            elif hasattr(value, "__len__"):
+                try:
+                    shape = str(len(value)) + " items"
+                except:
+                    pass
+
+            variables.append({
+                "name": name,
+                "type": type_name,
+                "preview": preview,
+                "shape": shape
+            })
+            
+        # Sort alphabetically
+        return sorted(variables, key=lambda x: x['name'])
 
     def run(self, task: str) -> Generator[Dict, None, Optional[ActionStep]]:
         """

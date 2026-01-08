@@ -135,12 +135,23 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
             emit('error', {'message': "Session not found"})
             return
         
+        # Prepare session data for UI (exclude raw python state)
         session_display = {k: v for k, v in session.items() if k != 'python_state'}
             
         print(f"📂 Loading session UI: {target_id}")
-        get_agent_wrapper(target_id) 
         
+        # Get the wrapper (this restores the python_state internally)
+        wrapper = get_agent_wrapper(target_id) 
+        
+        # Send Chat History
         emit('reload_chat', session_display)
+
+        # Send Restored Variables
+        vars_data = wrapper.get_active_variables()
+        emit('variable_state', {
+            'variables': vars_data, 
+            'session_id': target_id
+        })
 
     @socketio.on('rename_session')
     def handle_rename_session(data):
@@ -203,6 +214,14 @@ def serve(agent, host="127.0.0.1", port=5000, debug=True, storage_path=None):
                     # Inject Session ID into event so UI knows where to route it
                     event['session_id'] = session_id
                     emit(event['type'], event)
+
+                    # Update variable viewer after every Action Step (code execution)
+                    if event['type'] == 'action_step':
+                        vars_data = wrapper.get_active_variables()
+                        emit('variable_state', {
+                            'variables': vars_data, 
+                            'session_id': session_id
+                        })
                     
                 except StopIteration:
                     break

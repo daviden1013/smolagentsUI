@@ -57,9 +57,30 @@
                 </div>
             </div>
         </div>
-    </div>
 
-    <div id="modal-overlay" class="modal-overlay">
+        <div class="right-sidebar">
+            <div class="panel-section" id="var-panel">
+                <div class="panel-header" onclick="togglePanel('var-panel')">
+                    <span>Variables</span>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="panel-content" id="variable-list">
+                    <div class="empty-state">No variables active</div>
+                </div>
+            </div>
+
+            <div class="panel-section" id="output-panel">
+                <div class="panel-header" onclick="togglePanel('output-panel')">
+                    <span>Outputs</span>
+                    <span class="toggle-icon">▼</span>
+                </div>
+                <div class="panel-content" id="output-list">
+                    <div class="empty-state">No outputs yet</div>
+                </div>
+            </div>
+        </div>
+
+    </div> <div id="modal-overlay" class="modal-overlay">
         <div class="modal-box">
             <h3 id="modal-title">Title</h3>
             <div class="modal-content">

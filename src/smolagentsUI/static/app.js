@@ -4,6 +4,7 @@ const chatContainer = document.getElementById('chat-container');
 const userInput = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const historyList = document.getElementById('history-list');
+const variableList = document.getElementById('variable-list'); // NEW: Variable Viewer Element
 
 // Global State
 let isGenerating = false;
@@ -388,8 +389,6 @@ function renderFinalAnswer(container, content) {
     const div = document.createElement('div');
     div.className = 'final-answer';
     
-    // Removed Header Creation
-
     renderContentRecursive(div, content);
     
     div.querySelectorAll('pre code').forEach((block) => {
@@ -399,6 +398,68 @@ function renderFinalAnswer(container, content) {
     container.appendChild(div);
     scrollToBottom();
 }
+
+// --- NEW: Variable Viewer Logic ---
+
+function renderVariables(variables) {
+    if (!variables || variables.length === 0) {
+        variableList.innerHTML = '<div class="empty-state">No variables active</div>';
+        return;
+    }
+
+    variableList.innerHTML = '';
+    
+    variables.forEach(v => {
+        const card = document.createElement('div');
+        card.className = 'var-card';
+        
+        // Shape badge if available
+        const shapeBadge = v.shape ? `<span style="background:#333; padding:1px 4px; border-radius:3px; margin-left:6px;">${v.shape}</span>` : '';
+
+        card.innerHTML = `
+            <div class="var-header">
+                <span class="var-name">${v.name}</span>
+                <span class="var-type">${v.type}${shapeBadge}</span>
+            </div>
+            <div class="var-preview" title="${v.preview.replace(/"/g, '&quot;')}">${v.preview}</div>
+        `;
+        
+        card.onclick = () => {
+             console.log(`Inspect variable: ${v.name}`);
+             // Placeholder for Inspection Logic
+        };
+        
+        variableList.appendChild(card);
+    });
+}
+
+function togglePanel(id) {
+    const panel = document.getElementById(id);
+    if (!panel) return;
+    
+    panel.classList.toggle('collapsed');
+    
+    const varPanel = document.getElementById('var-panel');
+    const outPanel = document.getElementById('output-panel');
+    
+    if (!varPanel || !outPanel) return;
+
+    const isVarCollapsed = varPanel.classList.contains('collapsed');
+    const isOutCollapsed = outPanel.classList.contains('collapsed');
+
+    // 1. Reset inline styles so CSS classes can govern base behavior
+    outPanel.style.height = '';
+    outPanel.style.flexGrow = '';
+
+    // 2. Logic: If Variables panel is closed, allow Output panel to fill the sidebar
+    if (isVarCollapsed && !isOutCollapsed) {
+        outPanel.style.height = 'auto'; // Override fixed 40%
+        outPanel.style.flexGrow = '1';  // Take available space
+    }
+}
+// Expose globally for HTML onclick attributes
+window.togglePanel = togglePanel;
+
 
 // --- User Actions ---
 
@@ -562,19 +623,24 @@ function loadSession(id) {
 
 socket.on('reload_chat', (data) => {
     chatContainer.classList.remove('loading');
-
     chatContainer.innerHTML = '';
+    
+    if (variableList) {
+        variableList.innerHTML = '<div class="empty-state">No variables active</div>';
+    }
     
     if (data.id) currentSessionId = data.id;
     else currentSessionId = null; 
 
     toggleSendButtonState(false);
 
+    // Case 1: New/Empty Chat
     if (!data.steps || data.steps.length === 0) {
         renderWelcomeScreen();
         return;
     }
     
+    // Case 2: Restore History
     data.steps.forEach(step => {
         if ("task" in step) {
             createMessageBubble('user').textContent = step.task;
@@ -596,7 +662,6 @@ socket.on('reload_chat', (data) => {
         }
     });
     
-    // Always force scroll to bottom on reload
     scrollToBottom(true);
 });
 
@@ -739,6 +804,12 @@ socket.on('action_step', (data) => {
         data.images, 
         data.error
     );
+});
+
+// NEW: Listen for Variable Updates
+socket.on('variable_state', (data) => {
+    if (data.session_id !== currentSessionId) return;
+    renderVariables(data.variables);
 });
 
 socket.on('final_answer', (data) => {
